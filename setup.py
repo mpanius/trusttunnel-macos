@@ -3,11 +3,11 @@ from setuptools import setup, find_packages
 setup(
     name="trusttunnel-macos",
     version="1.0.0",
-    description="macOS menu bar GUI client for TrustTunnel VPN protocol",
+    description="macOS GUI client for TrustTunnel VPN protocol — windowed app with embedded console",
     author="Community",
-    url="https://github.com/TrustTunnel/TrustTunnel",
+    url="https://github.com/inhale/trusttunnel-macos",
     packages=find_packages(),
-    install_requires=["rumps>=0.4.0", "toml>=0.10.0"],
+    install_requires=["toml>=0.10.0"],
     entry_points={
         "console_scripts": [
             "trusttunnel-gui=src.app:main",

@@ -1,569 +1,513 @@
-"""TrustTunnel macOS GUI — menu bar app with full protocol feature support."""
+"""TrustTunnel macOS GUI — traditional windowed app with server management and embedded console."""
 
 import os
 import sys
-import json
-import subprocess
-import webbrowser
+import threading
+import tkinter as tk
+from tkinter import ttk, messagebox
 from typing import Optional
 
-import rumps
-
 from .config import (
-    ServerProfile, EndpointConfig, TunConfig, SocksConfig,
+    ServerProfile, EndpointConfig,
     load_servers, save_servers, parse_deeplink,
 )
 from .client import ClientManager, ClientState, ClientStatus
 
-# ── icons (SF Symbols names via macOS) ──────────────────────────
-ICON_DISCONNECTED = "🔒"
-ICON_CHECKING = "🟡"
-ICON_CONNECTING = "🟡"
-ICON_CONNECTED = "🟢"
-ICON_ERROR = "🔴"
+
+# ── colour constants ──────────────────────────────────────────────
+BG = "#1e1e1e"
+FG = "#d4d4d4"
+ACCENT = "#0078d4"
+ACCENT_HOVER = "#1a8ae8"
+ERROR_RED = "#f44747"
+SUCCESS_GREEN = "#4ec9b0"
+WARNING_YELLOW = "#cca700"
+ROW_ALT = "#2a2a2a"
+CONSOLE_BG = "#0d0d0d"
 
 
-class TrustTunnelApp(rumps.App):
-    def __init__(self):
-        super().__init__(
-            name="TrustTunnel",
-            title=ICON_DISCONNECTED,
-            icon=None,
-            quit_button=None,
+class AddEditDialog(tk.Toplevel):
+    """Modal dialog for adding or editing a server profile."""
+
+    def __init__(self, parent, profile: Optional[ServerProfile] = None):
+        super().__init__(parent)
+        self.title("Edit Server" if profile else "Add Server")
+        self.geometry("500x480")
+        self.resizable(False, False)
+        self.configure(bg=BG)
+        self.result: Optional[ServerProfile] = None
+
+        self._profile = profile
+        self._build()
+        self.transient(parent)
+        self.grab_set()
+        self.wait_window()
+
+    def _build(self):
+        pad = {"padx": 12, "pady": 4}
+
+        fields = [
+            ("Name:", "name", ""),
+            ("Hostname:", "hostname", ""),
+            ("Address (ip:port):", "address", ""),
+            ("Username:", "username", ""),
+            ("Password:", "password", ""),
+            ("Certificate (PEM):", "certificate", ""),
+        ]
+
+        self._entries = {}
+
+        row = 0
+        for label_text, key, default in fields:
+            lbl = tk.Label(self, text=label_text, bg=BG, fg=FG, anchor="w")
+            lbl.grid(row=row, column=0, sticky="w", **pad)
+
+            if key == "certificate":
+                entry = tk.Text(self, height=4, width=50, bg="#2d2d2d", fg=FG,
+                                insertbackground=FG, relief="flat", borderwidth=4)
+            elif key == "password":
+                entry = tk.Entry(self, show="*", width=40, bg="#2d2d2d", fg=FG,
+                                 insertbackground=FG, relief="flat")
+            else:
+                entry = tk.Entry(self, width=40, bg="#2d2d2d", fg=FG,
+                                 insertbackground=FG, relief="flat")
+
+            entry.grid(row=row, column=1, sticky="ew", **pad)
+            self._entries[key] = entry
+            row += 1
+
+        # Fill from existing profile
+        if self._profile:
+            ep = self._profile.endpoint
+            self._entries["name"].insert(0, self._profile.name)
+            self._entries["hostname"].insert(0, ep.hostname)
+            self._entries["address"].insert(0, ",".join(ep.addresses))
+            self._entries["username"].insert(0, ep.username)
+            self._entries["password"].insert(0, ep.password)
+            if ep.certificate:
+                self._entries["certificate"].insert("1.0", ep.certificate)
+
+        # Buttons
+        btn_frame = tk.Frame(self, bg=BG)
+        btn_frame.grid(row=row, column=0, columnspan=2, pady=16)
+
+        cancel_btn = tk.Button(btn_frame, text="Cancel", command=self.destroy,
+                               bg="#3a3a3a", fg=FG, relief="flat",
+                               activebackground="#4a4a4a", activeforeground=FG,
+                               padx=16, pady=4)
+        cancel_btn.pack(side="left", padx=8)
+
+        save_btn = tk.Button(btn_frame, text="Save", command=self._save,
+                             bg=ACCENT, fg="white", relief="flat",
+                             activebackground=ACCENT_HOVER, activeforeground="white",
+                             padx=24, pady=4)
+        save_btn.pack(side="left", padx=8)
+
+        self.grid_columnconfigure(1, weight=1)
+
+    def _save(self):
+        name = self._entries["name"].get().strip()
+        hostname = self._entries["hostname"].get().strip()
+        address = self._entries["address"].get().strip()
+        username = self._entries["username"].get().strip()
+        password = self._entries["password"].get()
+        cert_widget = self._entries["certificate"]
+        if isinstance(cert_widget, tk.Text):
+            certificate = cert_widget.get("1.0", "end-1c").strip()
+        else:
+            certificate = cert_widget.get().strip()
+
+        if not name or not hostname or not address or not username:
+            messagebox.showwarning("Missing Fields",
+                                   "Name, Hostname, Address, and Username are required.",
+                                   parent=self)
+            return
+
+        addresses = [a.strip() for a in address.split(",") if a.strip()]
+
+        ep = EndpointConfig(
+            hostname=hostname,
+            addresses=addresses,
+            username=username,
+            password=password,
+            certificate=certificate,
+            skip_verification=not bool(certificate),
         )
+
+        if self._profile:
+            self._profile.name = name
+            self._profile.endpoint = ep
+            self.result = self._profile
+        else:
+            self.result = ServerProfile(name=name, endpoint=ep)
+
+        self.destroy()
+
+
+class TrustTunnelWindow(tk.Tk):
+    """Main application window."""
+
+    def __init__(self):
+        super().__init__()
+        self.title("TrustTunnel VPN")
+        self.geometry("820x620")
+        self.minsize(600, 400)
+        self.configure(bg=BG)
+
         self.client = ClientManager()
         self.servers: list[ServerProfile] = load_servers()
-        self.active_profile: Optional[ServerProfile] = None
-        self.client.on_state_change(self._on_client_state)
+        self._selected_index: Optional[int] = None
 
-        # Timer to update status periodically
-        self.timer = rumps.Timer(self._update_title, 2)
-        self.timer.start()
+        self._build_ui()
+        self._refresh_server_list()
 
-        self._build_menu()
+        # Status update timer
+        self._poll_status()
 
-    # ── Menu building ──────────────────────────────────────────
+        # Window close → disconnect
+        self.protocol("WM_DELETE_WINDOW", self._on_close)
 
-    def _build_menu(self):
-        """Rebuild the entire menu."""
-        self.menu.clear()
+    # ── UI construction ──────────────────────────────────────────
 
-        # Connection status
-        status = self.client.status
-        phase_str = f" [{status.phase.value}]" if status.phase.value != "idle" else ""
-        state_label = f"Status: {status.state.value}{phase_str}"
-        self.menu.add(rumps.MenuItem(state_label, callback=None))
+    def _build_ui(self):
+        # ── Toolbar ──
+        toolbar = tk.Frame(self, bg="#252525", height=36)
+        toolbar.pack(fill="x")
+        toolbar.pack_propagate(False)
 
-        # Server switcher
-        server_menu = rumps.MenuItem("Servers")
-        if not self.servers:
-            server_menu.add(rumps.MenuItem("No servers configured", callback=None))
-        else:
-            for i, s in enumerate(self.servers):
-                active_mark = " ✓" if (
-                    self.active_profile and self.active_profile.name == s.name
-                ) else ""
-                server_menu.add(rumps.MenuItem(
-                    f"{s.name}{active_mark}",
-                    callback=self._make_server_callback(i),
-                ))
-        server_menu.add(rumps.separator)
-        server_menu.add(rumps.MenuItem("Add Server...", callback=self._add_server))
-        server_menu.add(rumps.MenuItem("Import from deep-link...", callback=self._import_deeplink))
-        server_menu.add(rumps.MenuItem("Edit Server...", callback=self._edit_server))
-        server_menu.add(rumps.MenuItem("Delete Server...", callback=self._delete_server))
-        self.menu.add(server_menu)
+        tk.Label(toolbar, text="🔒 TrustTunnel VPN", bg="#252525", fg=FG,
+                 font=("Helvetica", 12, "bold")).pack(side="left", padx=12, pady=6)
 
-        self.menu.add(rumps.separator)
+        self._status_dot = tk.Label(toolbar, text="⚫", bg="#252525", fg="#666",
+                                    font=("Helvetica", 10))
+        self._status_dot.pack(side="left", padx=(0, 4))
 
-        # Quick toggle: Connect/Disconnect
-        if self.client.is_connected():
-            self.menu.add(rumps.MenuItem(
-                f"Disconnect from {self.active_profile.name if self.active_profile else 'VPN'}",
-                callback=self._disconnect,
-            ))
-        else:
-            self.menu.add(rumps.MenuItem("Quick Connect", callback=self._quick_connect))
+        self._status_label = tk.Label(toolbar, text="Disconnected", bg="#252525",
+                                      fg="#888", font=("Helvetica", 10))
+        self._status_label.pack(side="left")
 
-        self.menu.add(rumps.separator)
+        # ── Main content (paned for server list + console) ──
+        paned = ttk.PanedWindow(self, orient="vertical")
+        paned.pack(fill="both", expand=True, padx=8, pady=(4, 8))
 
-        # Protocol options
-        proto_menu = rumps.MenuItem("Protocol")
-        proto_menu.add(rumps.MenuItem(
-            "HTTP/2 (recommended)", callback=self._set_proto_http2,
-        ))
-        proto_menu.add(rumps.MenuItem(
-            "HTTP/3 / QUIC", callback=self._set_proto_http3,
-        ))
-        self.menu.add(proto_menu)
+        # Top: server list
+        top_frame = tk.Frame(paned, bg=BG)
+        paned.add(top_frame, weight=1)
 
-        # Listener type
-        listener_menu = rumps.MenuItem("Mode")
-        listener_menu.add(rumps.MenuItem(
-            "TUN (system-wide VPN)", callback=self._set_listener_tun,
-        ))
-        listener_menu.add(rumps.MenuItem(
-            "SOCKS5 proxy", callback=self._set_listener_socks,
-        ))
-        self.menu.add(listener_menu)
+        # Server table
+        columns = ("name", "hostname", "address", "username", "status")
+        self._tree = ttk.Treeview(top_frame, columns=columns, show="headings",
+                                  selectmode="browse", height=8)
 
-        # Routing mode
-        route_menu = rumps.MenuItem("Routing")
-        route_menu.add(rumps.MenuItem(
-            "General (route all)", callback=self._set_vpn_general,
-        ))
-        route_menu.add(rumps.MenuItem(
-            "Selective (route only exclusions)", callback=self._set_vpn_selective,
-        ))
-        self.menu.add(route_menu)
+        style = ttk.Style()
+        style.theme_use("default")
+        style.configure("Treeview",
+                        background="#252525", foreground=FG,
+                        fieldbackground="#252525", rowheight=28,
+                        borderwidth=0)
+        style.configure("Treeview.Heading",
+                        background="#333", foreground=FG,
+                        relief="flat", borderwidth=0, font=("Helvetica", 10, "bold"))
+        style.map("Treeview",
+                  background=[("selected", ACCENT)],
+                  foreground=[("selected", "white")])
 
-        # Toggles
-        self.menu.add(rumps.separator)
-        ks_state = self.active_profile.killswitch_enabled if self.active_profile else True
-        self.menu.add(rumps.MenuItem(
-            f"Kill Switch: {'ON' if ks_state else 'OFF'}",
-            callback=self._toggle_killswitch,
-        ))
-        pq_state = self.active_profile.post_quantum_group_enabled if self.active_profile else True
-        self.menu.add(rumps.MenuItem(
-            f"Post-Quantum: {'ON' if pq_state else 'OFF'}",
-            callback=self._toggle_post_quantum,
-        ))
-        adpi = self.active_profile.endpoint.anti_dpi if self.active_profile else False
-        self.menu.add(rumps.MenuItem(
-            f"Anti-DPI: {'ON' if adpi else 'OFF'}",
-            callback=self._toggle_anti_dpi,
-        ))
+        self._tree.heading("name", text="Name", anchor="w")
+        self._tree.heading("hostname", text="Hostname", anchor="w")
+        self._tree.heading("address", text="Address", anchor="w")
+        self._tree.heading("username", text="Username", anchor="w")
+        self._tree.heading("status", text="Status", anchor="w")
 
-        self.menu.add(rumps.separator)
+        self._tree.column("name", width=130, minwidth=80)
+        self._tree.column("hostname", width=130, minwidth=80)
+        self._tree.column("address", width=160, minwidth=100)
+        self._tree.column("username", width=100, minwidth=60)
+        self._tree.column("status", width=80, minwidth=60)
 
-        # DNS management
-        self.menu.add(rumps.MenuItem("DNS Settings...", callback=self._dns_settings))
+        self._tree.pack(fill="both", expand=True, side="left")
 
-        # Split tunneling / exclusions
-        self.menu.add(rumps.MenuItem("Exclusions...", callback=self._exclusions_editor))
+        scrollbar = ttk.Scrollbar(top_frame, orient="vertical", command=self._tree.yview)
+        scrollbar.pack(side="right", fill="y")
+        self._tree.configure(yscrollcommand=scrollbar.set)
 
-        self.menu.add(rumps.separator)
+        self._tree.bind("<<TreeviewSelect>>", self._on_server_select)
+        self._tree.bind("<Double-1>", lambda e: self._connect_selected())
 
-        # Info
-        self.menu.add(rumps.MenuItem("Connection Info", callback=self._show_info))
-        self.menu.add(rumps.MenuItem("Connection Diagnostics", callback=self._show_diagnostics))
-        self.menu.add(rumps.MenuItem("View Logs", callback=self._show_logs))
-        self.menu.add(rumps.MenuItem("Open Config Folder", callback=self._open_config_folder))
-        self.menu.add(rumps.MenuItem("Check for Updates", callback=self._check_updates))
+        # ── Server action buttons ──
+        btn_frame = tk.Frame(self, bg=BG)
+        btn_frame.pack(fill="x", padx=8, pady=(0, 4))
 
-        self.menu.add(rumps.separator)
-        self.menu.add(rumps.MenuItem("About TrustTunnel GUI", callback=self._about))
-        self.menu.add(rumps.MenuItem("Quit", callback=self._quit))
+        self._make_btn(btn_frame, "+ Add", self._add_server).pack(side="left", padx=2)
+        self._make_btn(btn_frame, "✎ Edit", self._edit_server).pack(side="left", padx=2)
+        self._make_btn(btn_frame, "✕ Delete", self._delete_server).pack(side="left", padx=2)
+        self._make_btn(btn_frame, "📋 Import Link", self._import_deeplink).pack(side="left", padx=2)
 
-    # ── State updates ──────────────────────────────────────────
+        self._connect_btn = self._make_btn(
+            btn_frame, "▶ Connect", self._connect_selected, accent=True)
+        self._connect_btn.pack(side="right", padx=2)
 
-    def _on_client_state(self, status: ClientStatus):
-        """Called when client state changes."""
-        if status.state == ClientState.CONNECTED:
-            self.title = ICON_CONNECTED
-        elif status.state == ClientState.CONNECTING:
-            self.title = ICON_CONNECTING
-        elif status.state == ClientState.CHECKING:
-            self.title = ICON_CHECKING
-        elif status.state == ClientState.ERROR:
-            self.title = ICON_ERROR
-        else:
-            self.title = ICON_DISCONNECTED
-        self._build_menu()
+        self._disconnect_btn = self._make_btn(
+            btn_frame, "■ Disconnect", self._disconnect, accent=False)
+        # Hidden initially
 
-    def _update_title(self, _):
-        """Periodic status refresh."""
-        status = self.client.status
-        if status.state == ClientState.CONNECTED:
-            self.title = ICON_CONNECTED
-        elif status.state == ClientState.CONNECTING:
-            self.title = ICON_CONNECTING
-        elif status.state == ClientState.CHECKING:
-            self.title = ICON_CHECKING
-        elif status.state == ClientState.ERROR:
-            self.title = ICON_ERROR
-        else:
-            self.title = ICON_DISCONNECTED
+        # ── Console ──
+        console_label = tk.Label(self, text="Console", bg=BG, fg="#888",
+                                 font=("Helvetica", 9, "bold"), anchor="w")
+        console_label.pack(fill="x", padx=12, pady=(4, 0))
 
-    # ── Server callbacks ───────────────────────────────────────
+        console_frame = tk.Frame(self, bg=CONSOLE_BG, height=180)
+        console_frame.pack(fill="both", expand=False, padx=8, pady=(2, 4))
+        console_frame.pack_propagate(False)
 
-    def _make_server_callback(self, index: int):
-        def cb(_):
-            profile = self.servers[index]
-            self._connect_to(profile)
-        return cb
+        self._console = tk.Text(console_frame, bg=CONSOLE_BG, fg="#a0a0a0",
+                                font=("Menlo", 10), wrap="word", state="disabled",
+                                relief="flat", borderwidth=6, insertbackground=FG)
+        self._console.pack(fill="both", expand=True, side="left")
 
-    def _connect_to(self, profile: ServerProfile):
-        self.active_profile = profile
-        save_servers(self.servers)
-        rumps.notification(
-            "TrustTunnel",
-            f"Connecting to {profile.name}...",
-            f"{profile.endpoint.hostname}",
-        )
-        success = self.client.connect(profile)
-        if success:
-            self._build_menu()
-        else:
-            self._build_menu()
-            # Auto-show diagnostics on failure
-            self._show_diagnostics(None)
+        console_scroll = ttk.Scrollbar(console_frame, orient="vertical",
+                                       command=self._console.yview)
+        console_scroll.pack(side="right", fill="y")
+        self._console.configure(yscrollcommand=console_scroll.set)
 
-    def _quick_connect(self, _):
-        if not self.servers:
-            rumps.alert("No servers configured. Add one first.")
-            return
-        if len(self.servers) == 1:
-            self._connect_to(self.servers[0])
-        else:
-            # Show submenu-like picker via alert
-            names = [s.name for s in self.servers]
-            choice = rumps.alert(
-                title="Select Server",
-                message="\n".join(f"{i+1}. {n}" for i, n in enumerate(names)),
-                ok="Cancel",
+        # Console toolbar
+        console_toolbar = tk.Frame(self, bg=BG)
+        console_toolbar.pack(fill="x", padx=8)
+        self._make_btn(console_toolbar, "Clear", self._clear_console,
+                       small=True).pack(side="right")
+
+    def _make_btn(self, parent, text, command, accent=False, small=False):
+        bg_color = ACCENT if accent else "#3a3a3a"
+        fg_color = "white" if accent else FG
+        hover_bg = ACCENT_HOVER if accent else "#4a4a4a"
+        font_size = 9 if small else 10
+        pad = (8, 2) if small else (12, 4)
+
+        btn = tk.Button(parent, text=text, command=command,
+                        bg=bg_color, fg=fg_color, relief="flat",
+                        activebackground=hover_bg, activeforeground=fg_color,
+                        font=("Helvetica", font_size),
+                        padx=pad[0], pady=pad[1])
+        return btn
+
+    # ── Server management ────────────────────────────────────────
+
+    def _refresh_server_list(self):
+        """Reload server list into treeview."""
+        for item in self._tree.get_children():
+            self._tree.delete(item)
+
+        for i, s in enumerate(self.servers):
+            addr = ",".join(s.endpoint.addresses) if s.endpoint.addresses else ""
+            is_active = (
+                self.client.is_connected()
+                and self.client.status.server_name == s.name
             )
+            status = "🟢 connected" if is_active else "⚫ idle"
+            tag = "connected" if is_active else ""
 
-    def _disconnect(self, _):
-        self.client.disconnect()
-        self.active_profile = None
-        self._build_menu()
-        rumps.notification("TrustTunnel", "Disconnected", "")
+            self._tree.insert("", "end", iid=str(i), values=(
+                s.name,
+                s.endpoint.hostname,
+                addr,
+                s.endpoint.username,
+                status,
+            ), tags=(tag,))
 
-    def _add_server(self, _):
-        """Open server editor window."""
-        resp = rumps.Window(
-            title="Add TrustTunnel Server",
-            message=(
-                "Enter server details:\n\n"
-                "Name, Hostname, Address (ip:port), Username, Password\n"
-                "Separate multiple addresses with commas."
-            ),
-            default_text="My Server\nvpn.example.com\n192.168.1.1:443\nmyuser\nmypassword",
-            dimensions=(400, 200),
-        ).run()
+        self._tree.tag_configure("connected", background="#1a3a2a", foreground=SUCCESS_GREEN)
 
-        if not resp.clicked or not resp.text.strip():
-            return
-
-        lines = resp.text.strip().split("\n")
-        if len(lines) < 4:
-            rumps.alert("Need at least: name, hostname, address, username, password")
-            return
-
-        name = lines[0].strip()
-        hostname = lines[1].strip()
-        addresses = [a.strip() for a in lines[2].split(",") if a.strip()]
-        username = lines[3].strip()
-        password = lines[4].strip() if len(lines) > 4 else ""
-
-        profile = ServerProfile(
-            name=name,
-            endpoint=EndpointConfig(
-                hostname=hostname,
-                addresses=addresses,
-                username=username,
-                password=password,
-            ),
-        )
-        self.servers.append(profile)
+    def _save_and_refresh(self):
         save_servers(self.servers)
-        self._build_menu()
+        self._refresh_server_list()
 
-    def _import_deeplink(self, _):
-        """Import server from tt://? deep-link from clipboard."""
+    def _on_server_select(self, event=None):
+        sel = self._tree.selection()
+        self._selected_index = int(sel[0]) if sel else None
+
+    def _add_server(self):
+        dlg = AddEditDialog(self)
+        if dlg.result:
+            self.servers.append(dlg.result)
+            self._save_and_refresh()
+            # Select the new server
+            idx = len(self.servers) - 1
+            self._tree.selection_set(str(idx))
+            self._tree.focus(str(idx))
+
+    def _edit_server(self):
+        if self._selected_index is None:
+            messagebox.showinfo("Select Server", "Select a server to edit first.")
+            return
+        profile = self.servers[self._selected_index]
+        dlg = AddEditDialog(self, profile=profile)
+        if dlg.result:
+            self.servers[self._selected_index] = dlg.result
+            self._save_and_refresh()
+
+    def _delete_server(self):
+        if self._selected_index is None:
+            messagebox.showinfo("Select Server", "Select a server to delete first.")
+            return
+        profile = self.servers[self._selected_index]
+        if messagebox.askyesno("Delete Server",
+                               f"Delete server '{profile.name}'?",
+                               parent=self):
+            self.servers.pop(self._selected_index)
+            self._selected_index = None
+            self._save_and_refresh()
+
+    def _import_deeplink(self):
+        """Prompt for tt://? deep-link and import."""
+        dlg = tk.Toplevel(self)
+        dlg.title("Import Deep-Link")
+        dlg.geometry("580x140")
+        dlg.configure(bg=BG)
+        dlg.transient(self)
+        dlg.grab_set()
+
+        tk.Label(dlg, text="Paste a tt://? deep-link:", bg=BG, fg=FG).pack(padx=12, pady=(12, 4), anchor="w")
+
+        entry = tk.Text(dlg, height=2, width=60, bg="#2d2d2d", fg=FG,
+                        insertbackground=FG, relief="flat", borderwidth=4,
+                        font=("Menlo", 9))
+        entry.pack(fill="x", padx=12, pady=4)
+
+        # Try clipboard
         try:
-            clipboard = subprocess.check_output(
-                ["pbpaste"], text=True
-            ).strip()
+            clipboard = self.clipboard_get()
+            entry.insert("1.0", clipboard)
         except Exception:
-            clipboard = ""
+            pass
 
-        resp = rumps.Window(
-            title="Import Deep-Link",
-            message=(
-                "Paste a tt://? deep-link URI or TOML config.\n"
-                "The clipboard contents are pre-filled below."
-            ),
-            default_text=clipboard,
-            dimensions=(500, 200),
-        ).run()
+        def do_import():
+            uri = entry.get("1.0", "end-1c").strip()
+            if not uri:
+                dlg.destroy()
+                return
+            profile = parse_deeplink(uri)
+            if profile:
+                self.servers.append(profile)
+                self._save_and_refresh()
+                dlg.destroy()
+                self._log(f"Imported: {profile.name}")
+            else:
+                messagebox.showwarning("Parse Error",
+                                       "Could not parse deep-link. Check format.",
+                                       parent=dlg)
 
-        if not resp.clicked or not resp.text.strip():
+        btn_frame = tk.Frame(dlg, bg=BG)
+        btn_frame.pack(pady=8)
+        tk.Button(btn_frame, text="Cancel", command=dlg.destroy,
+                  bg="#3a3a3a", fg=FG, relief="flat", padx=12).pack(side="left", padx=4)
+        tk.Button(btn_frame, text="Import", command=do_import,
+                  bg=ACCENT, fg="white", relief="flat", padx=16).pack(side="left", padx=4)
+
+    # ── Connection controls ──────────────────────────────────────
+
+    def _connect_selected(self):
+        if self._selected_index is None:
+            messagebox.showinfo("Select Server", "Select a server to connect to first.")
             return
+        profile = self.servers[self._selected_index]
+        self._log(f"Connecting to {profile.name}...")
+        self._update_status("connecting", f"Connecting to {profile.name}...")
 
-        uri = resp.text.strip()
-        profile = parse_deeplink(uri)
-        if profile:
-            self.servers.append(profile)
-            save_servers(self.servers)
-            rumps.notification("TrustTunnel", f"Imported: {profile.name}", "")
-        else:
-            rumps.alert("Could not parse deep-link. Check format.")
+        # Run connect in background to not block UI
+        def do_connect():
+            success = self.client.connect(profile)
+            if not success:
+                self.after(0, lambda: self._log(f"ERROR: {self.client.status.error}"))
+            self.after(0, self._refresh_server_list)
 
-        self._build_menu()
+        t = threading.Thread(target=do_connect, daemon=True)
+        t.start()
 
-    def _edit_server(self, _):
-        if not self.servers:
-            rumps.alert("No servers to edit.")
-            return
-        names = [s.name for s in self.servers]
-        choice = rumps.alert(
-            title="Edit Server",
-            message="Which server?",
-            ok=None,
-            cancel="Cancel",
-            other=names,
-        )
-        # rumps alert returns index of button clicked
-        # This is limited — for a real app we'd use a proper selector
-
-    def _delete_server(self, _):
-        if not self.servers:
-            return
-        names = [s.name for s in self.servers]
-        choice = rumps.alert(
-            title="Delete Server",
-            message="Select server to delete:",
-            ok=None,
-            cancel="Cancel",
-            other=names,
-        )
-
-    # ── Settings callbacks ─────────────────────────────────────
-
-    def _set_proto_http2(self, _):
-        if self.active_profile:
-            self.active_profile.endpoint.upstream_protocol = "http2"
-            save_servers(self.servers)
-            self._build_menu()
-            if self.client.is_connected():
-                rumps.alert("Reconnect for protocol change to take effect.")
-
-    def _set_proto_http3(self, _):
-        if self.active_profile:
-            self.active_profile.endpoint.upstream_protocol = "http3"
-            save_servers(self.servers)
-            self._build_menu()
-            if self.client.is_connected():
-                rumps.alert("Reconnect for protocol change to take effect.")
-
-    def _set_listener_tun(self, _):
-        if not self.active_profile:
-            rumps.alert("Connect to a server first.")
-            return
-        self.active_profile.listener_type = "tun"
-        save_servers(self.servers)
-        self._build_menu()
-        if self.client.is_connected():
-            rumps.alert("Reconnect to switch to TUN mode.")
-
-    def _set_listener_socks(self, _):
-        if not self.active_profile:
-            rumps.alert("Connect to a server first.")
-            return
-        self.active_profile.listener_type = "socks"
-        save_servers(self.servers)
-        self._build_menu()
-        if self.client.is_connected():
-            rumps.alert("Reconnect to switch to SOCKS5 mode.")
-
-    def _set_vpn_general(self, _):
-        if self.active_profile:
-            self.active_profile.vpn_mode = "general"
-            save_servers(self.servers)
-            self._build_menu()
-
-    def _set_vpn_selective(self, _):
-        if self.active_profile:
-            self.active_profile.vpn_mode = "selective"
-            save_servers(self.servers)
-            self._build_menu()
-
-    def _toggle_killswitch(self, _):
-        if not self.active_profile:
-            return
-        self.active_profile.killswitch_enabled = not self.active_profile.killswitch_enabled
-        save_servers(self.servers)
-        self._build_menu()
-
-    def _toggle_post_quantum(self, _):
-        if not self.active_profile:
-            return
-        self.active_profile.post_quantum_group_enabled = (
-            not self.active_profile.post_quantum_group_enabled
-        )
-        save_servers(self.servers)
-        self._build_menu()
-
-    def _toggle_anti_dpi(self, _):
-        if not self.active_profile:
-            return
-        self.active_profile.endpoint.anti_dpi = not self.active_profile.endpoint.anti_dpi
-        save_servers(self.servers)
-        self._build_menu()
-
-    def _dns_settings(self, _):
-        if not self.active_profile:
-            rumps.alert("Connect to a server first.")
-            return
-        current = "\n".join(self.active_profile.endpoint.dns_upstreams) or "(AdGuard DNS)"
-        resp = rumps.Window(
-            title="DNS Upstreams",
-            message=(
-                "Enter DNS servers, one per line:\n"
-                "  8.8.8.8           — plain UDP\n"
-                "  tls://1.1.1.1      — DNS over TLS\n"
-                "  https://dns.adguard.com/dns-query  — DNS over HTTPS\n"
-                "  quic://dns.adguard.com:8853        — DNS over QUIC\n"
-                "  tcp://8.8.8.8:53   — DNS over TCP\n"
-                "Leave empty for AdGuard DNS default."
-            ),
-            default_text=current,
-            dimensions=(500, 250),
-        ).run()
-        if resp.clicked:
-            upstreams = [l.strip() for l in resp.text.strip().split("\n") if l.strip()]
-            if upstreams == ["(AdGuard DNS)"]:
-                upstreams = []
-            self.active_profile.endpoint.dns_upstreams = upstreams
-            save_servers(self.servers)
-
-    def _exclusions_editor(self, _):
-        if not self.active_profile:
-            rumps.alert("Connect to a server first.")
-            return
-        current = "\n".join(self.active_profile.exclusions) or "(none)"
-        resp = rumps.Window(
-            title="Split Tunneling Exclusions",
-            message=(
-                "Enter domains/IPs/CIDRs to exclude/route, one per line:\n"
-                "  example.com   — domain\n"
-                "  *.google.com  — wildcard\n"
-                "  192.168.0.0/16 — CIDR\n"
-                "  *:443         — all port 443 traffic"
-            ),
-            default_text=current,
-            dimensions=(500, 250),
-        ).run()
-        if resp.clicked:
-            exclusions = [l.strip() for l in resp.text.strip().split("\n") if l.strip()]
-            if exclusions == ["(none)"]:
-                exclusions = []
-            self.active_profile.exclusions = exclusions
-            save_servers(self.servers)
-
-    # ── Info / Utility ─────────────────────────────────────────
-
-    def _show_info(self, _):
-        status = self.client.status
-        info = [
-            f"State: {status.state.value}",
-            f"Phase: {status.phase.value}",
-            f"Server: {status.server_name or 'N/A'}",
-            f"Uptime: {int(status.uptime)}s",
-        ]
-        if status.started_at:
-            info.append(f"Started: {status.started_at.strftime('%H:%M:%S')}")
-        if self.active_profile:
-            info += [
-                f"Protocol: {self.active_profile.endpoint.upstream_protocol}",
-                f"Mode: {self.active_profile.listener_type}",
-                f"VPN Mode: {self.active_profile.vpn_mode}",
-                f"Kill Switch: {'ON' if self.active_profile.killswitch_enabled else 'OFF'}",
-                f"Post-Quantum: {'ON' if self.active_profile.post_quantum_group_enabled else 'OFF'}",
-                f"Anti-DPI: {'ON' if self.active_profile.endpoint.anti_dpi else 'OFF'}",
-            ]
-        if status.error:
-            info.append(f"\nError: {status.error}")
-        rumps.alert(title="Connection Info", message="\n".join(info))
-
-    def _show_diagnostics(self, _):
-        """Show full connection attempt log with phase markers."""
-        status = self.client.status
-        lines = [
-            "═══════════ CONNECTION DIAGNOSTICS ═══════════",
-            f"State:  {status.state.value}",
-            f"Phase:  {status.phase.value}",
-            f"Server: {status.server_name or 'N/A'}",
-            f"Error:  {status.error or '(none)'}",
-            "",
-            "─── Step-by-step log ───",
-            self.client.get_full_logs() or "(no log entries — no connection attempted yet)",
-            "",
-            "─── Tip ───",
-            "• If 'sudo requires password': add NOPASSWD to /etc/sudoers",
-            "• If 'binary not found': run install script from TrustTunnelClient repo",
-            "• Check server address and port are correct",
-            "• Try 'View Logs' for live client output after connecting",
-        ]
-        rumps.Window(
-            title="Connection Diagnostics",
-            message="\n".join(lines),
-            dimensions=(650, 450),
-            ok="Close",
-        ).run()
-
-    def _show_logs(self, _):
-        logs = self.client.get_logs(60)
-        status = self.client.status
-        header = (
-            f"State: {status.state.value} | Phase: {status.phase.value}\n"
-            f"Recent output from trusttunnel_client:\n"
-            f"{'═' * 40}"
-        )
-        rumps.Window(
-            title="Client Runtime Logs",
-            message=header,
-            default_text=logs or "(no output yet)",
-            dimensions=(700, 450),
-            ok="Close",
-        ).run()
-
-    def _open_config_folder(self, _):
-        from .config import APP_DIR
-        os.makedirs(APP_DIR, exist_ok=True)
-        subprocess.Popen(["open", APP_DIR])
-
-    def _check_updates(self, _):
-        rumps.alert(
-            title="Check for Updates",
-            message="Visit https://github.com/TrustTunnel/TrustTunnel/releases",
-        )
-
-    def _about(self, _):
-        rumps.alert(
-            title="TrustTunnel macOS GUI",
-            message=(
-                "A native-feeling macOS menu bar client for the TrustTunnel VPN protocol.\n\n"
-                "Features:\n"
-                "• HTTP/2 & HTTP/3 (QUIC) support\n"
-                "• TUN system-wide VPN & SOCKS5 proxy\n"
-                "• Split tunneling with exclusion lists\n"
-                "• Custom DNS (DoH, DoT, DoQ, plain)\n"
-                "• Kill switch, post-quantum, anti-DPI\n"
-                "• Deep-link import (tt://?)\n"
-                "• Multi-server profile management\n\n"
-                "Built with rumps (Python) + trusttunnel_client"
-            ),
-        )
-
-    def _quit(self, _):
-        if self.client.is_connected():
-            resp = rumps.alert(
-                title="Disconnect?",
-                message="VPN is connected. Disconnect before quitting?",
-                ok="Disconnect & Quit",
-                cancel="Cancel",
-                other="Quit Anyway",
-            )
+    def _disconnect(self):
+        self._log("Disconnecting...")
         self.client.disconnect()
-        rumps.quit_application()
+        self._update_status("disconnected", "Disconnected")
+        self._refresh_server_list()
+
+    # ── Console ───────────────────────────────────────────────────
+
+    def _log(self, text: str):
+        self._console.configure(state="normal")
+        self._console.insert("end", text + "\n")
+        self._console.see("end")
+        self._console.configure(state="disabled")
+
+    def _clear_console(self):
+        self._console.configure(state="normal")
+        self._console.delete("1.0", "end")
+        self._console.configure(state="disabled")
+
+    # ── Status polling ───────────────────────────────────────────
+
+    def _poll_status(self):
+        """Periodically update status and console from client."""
+        try:
+            status = self.client.status
+
+            # Update status indicator
+            state_map = {
+                ClientState.DISCONNECTED: ("⚫", "Disconnected", "#666"),
+                ClientState.CHECKING: ("🟡", "Checking...", WARNING_YELLOW),
+                ClientState.CONNECTING: ("🟡", f"Connecting... [{status.phase.value}]",
+                                         WARNING_YELLOW),
+                ClientState.CONNECTED: ("🟢", f"Connected — {status.server_name}",
+                                        SUCCESS_GREEN),
+                ClientState.ERROR: ("🔴", "Error", ERROR_RED),
+            }
+            dot, label, color = state_map.get(status.state,
+                                              ("⚫", status.state.value, "#666"))
+
+            self._status_dot.configure(text=dot, fg=color)
+            self._status_label.configure(text=label, fg=color)
+
+            # Show/hide connect/disconnect buttons
+            if status.state == ClientState.CONNECTED:
+                self._connect_btn.pack_forget()
+                self._disconnect_btn.pack(side="right", padx=2)
+            else:
+                self._disconnect_btn.pack_forget()
+                self._connect_btn.pack(side="right", padx=2)
+
+            # Append new log lines to console
+            lines = status.log_lines
+            if hasattr(self, "_last_log_count"):
+                new_lines = lines[self._last_log_count:]
+                for line in new_lines:
+                    self._log(line)
+            self._last_log_count = len(lines)
+
+            # Refresh server list periodically
+            if status.state in (ClientState.CONNECTED, ClientState.CONNECTING,
+                                ClientState.CHECKING):
+                self._refresh_server_list()
+
+        except Exception:
+            pass
+
+        self.after(300, self._poll_status)
+
+    def _update_status(self, state: str, text: str):
+        pass  # handled by _poll_status
+
+    # ── Lifecycle ─────────────────────────────────────────────────
+
+    def _on_close(self):
+        if self.client.is_connected():
+            if messagebox.askyesno("Disconnect",
+                                   "VPN is connected. Disconnect and quit?",
+                                   parent=self):
+                self.client.disconnect()
+            else:
+                return
+        self.destroy()
 
 
 def main():
-    TrustTunnelApp().run()
+    app = TrustTunnelWindow()
+    app.mainloop()
 
 
 if __name__ == "__main__":
