@@ -17,6 +17,7 @@ from .client import ClientManager, ClientState, ClientStatus
 
 # ── icons (SF Symbols names via macOS) ──────────────────────────
 ICON_DISCONNECTED = "🔒"
+ICON_CHECKING = "🟡"
 ICON_CONNECTING = "🟡"
 ICON_CONNECTED = "🟢"
 ICON_ERROR = "🔴"
@@ -49,7 +50,9 @@ class TrustTunnelApp(rumps.App):
 
         # Connection status
         status = self.client.status
-        self.menu.add(rumps.MenuItem(f"Status: {status.state.value}", callback=None))
+        phase_str = f" [{status.phase.value}]" if status.phase.value != "idle" else ""
+        state_label = f"Status: {status.state.value}{phase_str}"
+        self.menu.add(rumps.MenuItem(state_label, callback=None))
 
         # Server switcher
         server_menu = rumps.MenuItem("Servers")
@@ -144,6 +147,7 @@ class TrustTunnelApp(rumps.App):
 
         # Info
         self.menu.add(rumps.MenuItem("Connection Info", callback=self._show_info))
+        self.menu.add(rumps.MenuItem("Connection Diagnostics", callback=self._show_diagnostics))
         self.menu.add(rumps.MenuItem("View Logs", callback=self._show_logs))
         self.menu.add(rumps.MenuItem("Open Config Folder", callback=self._open_config_folder))
         self.menu.add(rumps.MenuItem("Check for Updates", callback=self._check_updates))
@@ -160,6 +164,8 @@ class TrustTunnelApp(rumps.App):
             self.title = ICON_CONNECTED
         elif status.state == ClientState.CONNECTING:
             self.title = ICON_CONNECTING
+        elif status.state == ClientState.CHECKING:
+            self.title = ICON_CHECKING
         elif status.state == ClientState.ERROR:
             self.title = ICON_ERROR
         else:
@@ -173,6 +179,8 @@ class TrustTunnelApp(rumps.App):
             self.title = ICON_CONNECTED
         elif status.state == ClientState.CONNECTING:
             self.title = ICON_CONNECTING
+        elif status.state == ClientState.CHECKING:
+            self.title = ICON_CHECKING
         elif status.state == ClientState.ERROR:
             self.title = ICON_ERROR
         else:
@@ -198,10 +206,9 @@ class TrustTunnelApp(rumps.App):
         if success:
             self._build_menu()
         else:
-            rumps.alert(
-                title="Connection Failed",
-                message=self.client.status.error or "Could not connect.",
-            )
+            self._build_menu()
+            # Auto-show diagnostics on failure
+            self._show_diagnostics(None)
 
     def _quick_connect(self, _):
         if not self.servers:
@@ -453,9 +460,12 @@ class TrustTunnelApp(rumps.App):
         status = self.client.status
         info = [
             f"State: {status.state.value}",
+            f"Phase: {status.phase.value}",
             f"Server: {status.server_name or 'N/A'}",
             f"Uptime: {int(status.uptime)}s",
         ]
+        if status.started_at:
+            info.append(f"Started: {status.started_at.strftime('%H:%M:%S')}")
         if self.active_profile:
             info += [
                 f"Protocol: {self.active_profile.endpoint.upstream_protocol}",
@@ -469,13 +479,45 @@ class TrustTunnelApp(rumps.App):
             info.append(f"\nError: {status.error}")
         rumps.alert(title="Connection Info", message="\n".join(info))
 
-    def _show_logs(self, _):
-        logs = self.client.get_logs(30)
+    def _show_diagnostics(self, _):
+        """Show full connection attempt log with phase markers."""
+        status = self.client.status
+        lines = [
+            "═══════════ CONNECTION DIAGNOSTICS ═══════════",
+            f"State:  {status.state.value}",
+            f"Phase:  {status.phase.value}",
+            f"Server: {status.server_name or 'N/A'}",
+            f"Error:  {status.error or '(none)'}",
+            "",
+            "─── Step-by-step log ───",
+            self.client.get_full_logs() or "(no log entries — no connection attempted yet)",
+            "",
+            "─── Tip ───",
+            "• If 'sudo requires password': add NOPASSWD to /etc/sudoers",
+            "• If 'binary not found': run install script from TrustTunnelClient repo",
+            "• Check server address and port are correct",
+            "• Try 'View Logs' for live client output after connecting",
+        ]
         rumps.Window(
-            title="Client Logs",
-            message="Recent output from trusttunnel_client:",
+            title="Connection Diagnostics",
+            message="\n".join(lines),
+            dimensions=(650, 450),
+            ok="Close",
+        ).run()
+
+    def _show_logs(self, _):
+        logs = self.client.get_logs(60)
+        status = self.client.status
+        header = (
+            f"State: {status.state.value} | Phase: {status.phase.value}\n"
+            f"Recent output from trusttunnel_client:\n"
+            f"{'═' * 40}"
+        )
+        rumps.Window(
+            title="Client Runtime Logs",
+            message=header,
             default_text=logs or "(no output yet)",
-            dimensions=(600, 400),
+            dimensions=(700, 450),
             ok="Close",
         ).run()
 
