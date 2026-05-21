@@ -132,9 +132,22 @@ if [ -d "$APP" ]; then
         rm -rf /Applications/TrustTunnel.app
         cp -R "$APP" /Applications/
         echo "  → Copied to /Applications/TrustTunnel.app"
-        echo ""
-        echo "  Sudo setup (one-time, required for VPN):"
-        echo "    sudo bash -c 'echo \"$(whoami) ALL=(ALL) NOPASSWD: /Applications/TrustTunnel.app/Contents/Resources/bin/trusttunnel_client\" > /etc/sudoers.d/trusttunnel'"
+
+        # Auto-configure sudo if not already done
+        SUDOERS="/etc/sudoers.d/trusttunnel"
+        if [ -f "$SUDOERS" ] && grep -q "trusttunnel_client" "$SUDOERS" 2>/dev/null; then
+            echo "  → Sudo already configured."
+        else
+            echo ""
+            echo "  TrustTunnel needs root to create a virtual network interface."
+            echo "  Configure passwordless sudo for the VPN client?"
+            read -p "  [Y/n]: " sudo_ans
+            if [ "${sudo_ans:-y}" = "y" ] || [ "${sudo_ans:-y}" = "Y" ] || [ -z "$sudo_ans" ]; then
+                "$SCRIPT_DIR/setup-sudo.sh"
+            else
+                echo "  (Skipped. Run ./setup-sudo.sh later.)"
+            fi
+        fi
     else
         echo "  To install later: cp -r \"$APP\" /Applications/"
     fi
