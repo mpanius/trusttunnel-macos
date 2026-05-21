@@ -14,95 +14,107 @@ from .config import (
 from .client import ClientManager, ClientState, ClientStatus
 
 
-# ── colours ───────────────────────────────────────────────────────
+# ── ttk style setup ───────────────────────────────────────────────
+def _setup_styles():
+    style = ttk.Style()
+    style.theme_use("default")  # 'aqua' has issues with custom colours
+
+    style.configure("Dark.TFrame", background="#1e1e1e")
+    style.configure("Dark.TLabel", background="#1e1e1e", foreground="#d4d4d4")
+    style.configure("DarkTitle.TLabel", background="#252525", foreground="#d4d4d4")
+    style.configure("DarkBold.TLabel", background="#1e1e1e", foreground="#d4d4d4",
+                    font=("Helvetica", 11, "bold"))
+    style.configure("Accent.TButton", background="#0078d4", foreground="white",
+                    font=("Helvetica", 11, "bold"))
+
+    style.configure("Treeview", background="#2d2d2d", foreground="#d4d4d4",
+                    fieldbackground="#2d2d2d", rowheight=26, borderwidth=0)
+    style.configure("Treeview.Heading", background="#3a3a3a", foreground="#d4d4d4",
+                    relief="flat", borderwidth=0,
+                    font=("Helvetica", 10, "bold"))
+    style.map("Treeview",
+              background=[("selected", "#0078d4")],
+              foreground=[("selected", "white")])
+
+    style.configure("DarkConsole.TFrame", background="#0d0d0d")
+
+
+# ── colours for tk widgets that don't use ttk ─────────────────────
 BG = "#1e1e1e"
 FG = "#d4d4d4"
+INPUT_BG = "#3a3a3a"   # lighter for contrast
+CONSOLE_BG = "#0d0d0d"
 ACCENT = "#0078d4"
-ACCENT_HOVER = "#1a8ae8"
 ERROR_RED = "#f44747"
 SUCCESS_GREEN = "#4ec9b0"
 WARNING_YELLOW = "#cca700"
-CONSOLE_BG = "#0d0d0d"
-INPUT_BG = "#2d2d2d"
-BTN_BG = "#3a3a3a"
-BTN_HOVER = "#4a4a4a"
 
 
 class AddEditDialog(tk.Toplevel):
-    """Modal dialog for adding/editing a server profile."""
+    """Modal form dialog using standard tk widgets (most reliable)."""
 
     def __init__(self, parent, profile: Optional[ServerProfile] = None):
         super().__init__(parent)
         self.title("Edit Server" if profile else "Add Server")
-        self.configure(bg=BG)
+        self.configure(bg="#252525")
         self.result: Optional[ServerProfile] = None
         self._profile = profile
 
-        # Make modal
         self.transient(parent)
         self.grab_set()
 
-        # Build inside a frame
         self._build()
-
-        # Size to content
-        self.update_idletasks()
-        w = self.winfo_reqwidth() + 40
-        h = self.winfo_reqheight() + 20
-        self.geometry(f"{max(w, 440)}x{max(h, 380)}")
         self.resizable(False, False)
-
-        # Center on parent
-        if parent:
-            px = parent.winfo_rootx()
-            py = parent.winfo_rooty()
-            pw = parent.winfo_width()
-            ph = parent.winfo_height()
-            self.geometry(f"+{px + (pw - w) // 2}+{py + (ph - h) // 2}")
-
         self.wait_window()
 
     def _build(self):
-        frame = tk.Frame(self, bg=BG, padx=16, pady=12)
-        frame.pack(fill="both", expand=True)
+        # Main form area — lighter background so inputs stand out
+        form = tk.Frame(self, bg="#2a2a2a", padx=20, pady=16)
+        form.pack(fill="both", expand=True)
 
         fields = [
-            ("Name:", "name", False),
-            ("Hostname:", "hostname", False),
-            ("Address (ip:port):", "address", False),
-            ("Username:", "username", False),
-            ("Password:", "password", True),
-            ("Certificate (PEM, optional):", "certificate", False),
+            ("Name", "name", False),
+            ("Hostname", "hostname", False),
+            ("Address (ip:port)", "address", False),
+            ("Username", "username", False),
+            ("Password", "password", True),
+            ("Certificate PEM (optional)", "certificate", False),
         ]
 
         self._entries = {}
         for label_text, key, is_password in fields:
-            row_frame = tk.Frame(frame, bg=BG)
-            row_frame.pack(fill="x", pady=3)
+            row = tk.Frame(form, bg="#2a2a2a")
+            row.pack(fill="x", pady=3)
 
-            tk.Label(row_frame, text=label_text, bg=BG, fg=FG,
-                     anchor="w", width=22).pack(side="left")
+            tk.Label(row, text=label_text + ":", bg="#2a2a2a", fg="#cccccc",
+                     anchor="e", width=20, font=("Helvetica", 10)).pack(
+                side="left", padx=(0, 8))
 
             if key == "certificate":
-                entry = tk.Text(row_frame, height=4, width=42,
-                                bg=INPUT_BG, fg=FG, insertbackground=FG,
-                                relief="flat", borderwidth=4,
-                                font=("Menlo", 9))
-                entry.pack(side="left", fill="x", expand=True)
+                w = tk.Text(row, height=4, width=42,
+                            bg="#1a1a1a", fg="#e0e0e0",
+                            insertbackground="#e0e0e0",
+                            relief="solid", borderwidth=1,
+                            font=("Menlo", 9))
+                w.pack(side="left", fill="x", expand=True)
             elif is_password:
-                entry = tk.Entry(row_frame, show="*", width=42,
-                                 bg=INPUT_BG, fg=FG, insertbackground=FG,
-                                 relief="flat")
-                entry.pack(side="left")
+                w = tk.Entry(row, show="*", width=42,
+                             bg="#1a1a1a", fg="#e0e0e0",
+                             insertbackground="#e0e0e0",
+                             relief="solid", borderwidth=1,
+                             font=("Helvetica", 11))
+                w.pack(side="left")
             else:
-                entry = tk.Entry(row_frame, width=42,
-                                 bg=INPUT_BG, fg=FG, insertbackground=FG,
-                                 relief="flat")
-                entry.pack(side="left")
+                w = tk.Entry(row, width=42,
+                             bg="#1a1a1a", fg="#e0e0e0",
+                             insertbackground="#e0e0e0",
+                             relief="solid", borderwidth=1,
+                             font=("Helvetica", 11))
+                w.pack(side="left")
 
-            self._entries[key] = entry
+            self._entries[key] = w
 
-        # Pre-fill from profile
+        # Pre-fill
         if self._profile:
             ep = self._profile.endpoint
             self._entries["name"].insert(0, self._profile.name)
@@ -114,18 +126,20 @@ class AddEditDialog(tk.Toplevel):
                 self._entries["certificate"].insert("1.0", ep.certificate)
 
         # Buttons
-        btn_frame = tk.Frame(frame, bg=BG)
+        btn_frame = tk.Frame(form, bg="#2a2a2a")
         btn_frame.pack(fill="x", pady=(16, 0))
 
         tk.Button(btn_frame, text="Cancel", command=self.destroy,
-                  bg=BTN_BG, fg=FG, relief="flat",
-                  activebackground=BTN_HOVER, activeforeground=FG,
-                  padx=16, pady=4).pack(side="left", padx=(0, 8))
+                  bg="#555", fg="#ccc", relief="flat",
+                  activebackground="#666", activeforeground="white",
+                  font=("Helvetica", 10), padx=14, pady=4).pack(
+            side="left", padx=(0, 10))
 
         tk.Button(btn_frame, text="Save", command=self._save,
                   bg=ACCENT, fg="white", relief="flat",
-                  activebackground=ACCENT_HOVER, activeforeground="white",
-                  padx=24, pady=4).pack(side="left")
+                  activebackground="#1a8ae8", activeforeground="white",
+                  font=("Helvetica", 10, "bold"), padx=20, pady=4).pack(
+            side="left")
 
     def _save(self):
         name = self._entries["name"].get().strip()
@@ -133,39 +147,36 @@ class AddEditDialog(tk.Toplevel):
         address = self._entries["address"].get().strip()
         username = self._entries["username"].get().strip()
         password = self._entries["password"].get()
-        cert_widget = self._entries["certificate"]
-        certificate = cert_widget.get("1.0", "end-1c").strip() if isinstance(cert_widget, tk.Text) else cert_widget.get().strip()
+        cert = self._entries["certificate"]
+        certificate = cert.get("1.0", "end-1c").strip() if isinstance(cert, tk.Text) else cert.get().strip()
 
         if not name or not hostname or not address or not username:
             messagebox.showwarning("Missing Fields",
-                                   "Name, Hostname, Address, and Username are required.",
+                                   "Name, Hostname, Address, Username are required.",
                                    parent=self)
             return
 
-        addresses = [a.strip() for a in address.split(",") if a.strip()]
         ep = EndpointConfig(
-            hostname=hostname, addresses=addresses,
+            hostname=hostname,
+            addresses=[a.strip() for a in address.split(",") if a.strip()],
             username=username, password=password,
             certificate=certificate,
             skip_verification=not bool(certificate),
         )
-
+        self.result = (self._profile or ServerProfile(name=name, endpoint=ep))
         if self._profile:
             self._profile.name = name
             self._profile.endpoint = ep
-            self.result = self._profile
-        else:
-            self.result = ServerProfile(name=name, endpoint=ep)
         self.destroy()
 
 
 class TrustTunnelWindow(tk.Tk):
-    """Main window."""
-
     def __init__(self):
         super().__init__()
         self.title("TrustTunnel VPN")
         self.configure(bg=BG)
+
+        _setup_styles()
 
         self.client = ClientManager()
         self.servers: list[ServerProfile] = load_servers()
@@ -173,178 +184,120 @@ class TrustTunnelWindow(tk.Tk):
 
         self._build()
         self._refresh_server_list()
-
-        # Geometry
-        self.geometry("800x600")
+        self.geometry("820x600")
         self.minsize(500, 400)
 
         self._poll_status()
         self.protocol("WM_DELETE_WINDOW", self._on_close)
 
-    # ── UI ────────────────────────────────────────────────────────
-
     def _build(self):
-        # Title bar
-        title_frame = tk.Frame(self, bg="#252525", height=32)
-        title_frame.pack(fill="x")
-        title_frame.pack_propagate(False)
+        # ── Title bar ──
+        title = tk.Frame(self, bg="#252525", height=34)
+        title.pack(fill="x")
+        title.pack_propagate(False)
 
-        tk.Label(title_frame, text="TrustTunnel VPN", bg="#252525", fg=FG,
-                 font=("Helvetica", 11, "bold")).pack(side="left", padx=12, pady=4)
+        tk.Label(title, text="  TrustTunnel VPN", bg="#252525", fg=FG,
+                 font=("Helvetica", 12, "bold")).pack(side="left", pady=4)
 
-        self._status_dot = tk.Label(title_frame, text="  ", bg="#252525",
-                                    fg="#666", font=("Helvetica", 11))
-        self._status_dot.pack(side="left")
+        self._status_dot = tk.Label(title, text="", bg="#252525", fg="#666",
+                                    font=("Helvetica", 13))
+        self._status_dot.pack(side="left", padx=(8, 0))
 
-        self._status_label = tk.Label(title_frame, text="Disconnected",
-                                      bg="#252525", fg="#888",
-                                      font=("Helvetica", 10))
-        self._status_label.pack(side="left", padx=(0, 12))
+        self._status_text = tk.Label(title, text="Disconnected", bg="#252525",
+                                     fg="#888", font=("Helvetica", 10))
+        self._status_text.pack(side="left", padx=4)
 
         # ── Server table ──
-        table_frame = tk.LabelFrame(self, text="Servers", bg=BG, fg="#888",
+        table_frame = tk.LabelFrame(self, text=" Servers ", bg=BG, fg="#888",
                                     font=("Helvetica", 9, "bold"),
                                     padx=4, pady=4)
         table_frame.pack(fill="both", expand=True, padx=8, pady=(4, 0))
 
-        columns = ("name", "hostname", "address", "username", "status")
-        self._tree = ttk.Treeview(table_frame, columns=columns, show="headings",
-                                  selectmode="browse")
-
-        style = ttk.Style()
-        style.theme_use("default")
-        style.configure("Treeview", background=INPUT_BG, foreground=FG,
-                        fieldbackground=INPUT_BG, rowheight=26, borderwidth=0)
-        style.configure("Treeview.Heading", background="#333", foreground=FG,
-                        relief="flat", borderwidth=0,
-                        font=("Helvetica", 10, "bold"))
-        style.map("Treeview",
-                  background=[("selected", ACCENT)],
-                  foreground=[("selected", "white")])
-
+        cols = ("name", "hostname", "address", "username", "status")
+        self._tree = ttk.Treeview(table_frame, columns=cols,
+                                  show="headings", selectmode="browse")
         self._tree.heading("name", text="Name", anchor="w")
         self._tree.heading("hostname", text="Hostname", anchor="w")
         self._tree.heading("address", text="Address", anchor="w")
         self._tree.heading("username", text="Username", anchor="w")
         self._tree.heading("status", text="Status", anchor="w")
-
         self._tree.column("name", width=110, minwidth=60)
         self._tree.column("hostname", width=110, minwidth=60)
         self._tree.column("address", width=150, minwidth=80)
         self._tree.column("username", width=90, minwidth=50)
-        self._tree.column("status", width=90, minwidth=60)
-
+        self._tree.column("status", width=80, minwidth=60)
         self._tree.pack(fill="both", expand=True, side="left")
 
         vsb = ttk.Scrollbar(table_frame, orient="vertical",
                            command=self._tree.yview)
         vsb.pack(side="right", fill="y")
         self._tree.configure(yscrollcommand=vsb.set)
-
         self._tree.bind("<<TreeviewSelect>>", self._on_server_select)
         self._tree.bind("<Double-1>", lambda e: self._connect_selected())
 
-        # ── Action buttons ──
-        action_frame = tk.Frame(self, bg=BG)
-        action_frame.pack(fill="x", padx=8, pady=4)
+        # ── Buttons ──
+        btn_bar = tk.Frame(self, bg=BG)
+        btn_bar.pack(fill="x", padx=8, pady=4)
 
-        self._btn_add = tk.Button(action_frame, text="+ Add",
-                                  command=self._add_server,
-                                  bg=BTN_BG, fg=FG, relief="flat",
-                                  activebackground=BTN_HOVER,
-                                  activeforeground=FG,
-                                  font=("Helvetica", 10), padx=10, pady=3)
-        self._btn_add.pack(side="left", padx=1)
+        def btn(text, cmd, accent=False):
+            return tk.Button(btn_bar, text=text, command=cmd,
+                             bg=ACCENT if accent else "#444",
+                             fg="white" if accent else FG,
+                             relief="flat",
+                             activebackground="#1a8ae8" if accent else "#555",
+                             activeforeground="white",
+                             font=("Helvetica", 10, "bold" if accent else "normal"),
+                             padx=12, pady=4)
 
-        self._btn_edit = tk.Button(action_frame, text="Edit",
-                                   command=self._edit_server,
-                                   bg=BTN_BG, fg=FG, relief="flat",
-                                   activebackground=BTN_HOVER,
-                                   activeforeground=FG,
-                                   font=("Helvetica", 10), padx=10, pady=3)
-        self._btn_edit.pack(side="left", padx=1)
+        btn("+ Add", self._add_server).pack(side="left", padx=1)
+        btn("Edit", self._edit_server).pack(side="left", padx=1)
+        btn("Delete", self._delete_server).pack(side="left", padx=1)
+        btn("Import Link", self._import_deeplink).pack(side="left", padx=1)
 
-        self._btn_del = tk.Button(action_frame, text="Delete",
-                                  command=self._delete_server,
-                                  bg=BTN_BG, fg=FG, relief="flat",
-                                  activebackground=BTN_HOVER,
-                                  activeforeground=FG,
-                                  font=("Helvetica", 10), padx=10, pady=3)
-        self._btn_del.pack(side="left", padx=1)
-
-        self._btn_import = tk.Button(action_frame, text="Import Link",
-                                     command=self._import_deeplink,
-                                     bg=BTN_BG, fg=FG, relief="flat",
-                                     activebackground=BTN_HOVER,
-                                     activeforeground=FG,
-                                     font=("Helvetica", 10), padx=10, pady=3)
-        self._btn_import.pack(side="left", padx=1)
-
-        self._btn_connect = tk.Button(action_frame, text="Connect",
-                                      command=self._connect_selected,
-                                      bg=ACCENT, fg="white", relief="flat",
-                                      activebackground=ACCENT_HOVER,
-                                      activeforeground="white",
-                                      font=("Helvetica", 10, "bold"),
-                                      padx=16, pady=3)
+        self._btn_connect = btn("Connect", self._connect_selected, accent=True)
         self._btn_connect.pack(side="right", padx=2)
 
-        self._btn_disconnect = tk.Button(action_frame, text="Disconnect",
-                                         command=self._disconnect,
-                                         bg=ERROR_RED, fg="white",
-                                         relief="flat",
-                                         activebackground="#d63a3a",
-                                         activeforeground="white",
-                                         font=("Helvetica", 10, "bold"),
-                                         padx=16, pady=3)
+        self._btn_disconnect = btn("Disconnect", self._disconnect, accent=False)
+        self._btn_disconnect.configure(bg=ERROR_RED,
+                                       activebackground="#d63a3a")
 
         # ── Console ──
-        console_frame = tk.LabelFrame(self, text="Console", bg=BG, fg="#888",
-                                      font=("Helvetica", 9, "bold"),
-                                      padx=4, pady=4)
-        console_frame.pack(fill="both", expand=False, padx=8, pady=(4, 8))
-        # Fixed height but can grow
-        console_frame.configure(height=160)
+        cons_frame = tk.LabelFrame(self, text=" Console ", bg=BG, fg="#888",
+                                   font=("Helvetica", 9, "bold"),
+                                   padx=4, pady=4)
+        cons_frame.pack(fill="both", expand=False, padx=8, pady=(4, 8))
 
-        self._console = tk.Text(console_frame, bg=CONSOLE_BG, fg="#a0a0a0",
+        self._console = tk.Text(cons_frame, bg=CONSOLE_BG, fg="#a0a0a0",
                                 font=("Menlo", 10), wrap="word",
                                 state="disabled", relief="flat",
                                 borderwidth=4, insertbackground=FG,
-                                height=6)
+                                height=7)
         self._console.pack(fill="both", expand=True, side="left")
 
-        csb = ttk.Scrollbar(console_frame, orient="vertical",
+        csb = ttk.Scrollbar(cons_frame, orient="vertical",
                            command=self._console.yview)
         csb.pack(side="right", fill="y")
         self._console.configure(yscrollcommand=csb.set)
 
-        # Clear button above console
-        tk.Button(console_frame, text="Clear", command=self._clear_console,
-                  bg=BTN_BG, fg=FG, relief="flat",
-                  activebackground=BTN_HOVER, activeforeground=FG,
+        tk.Button(cons_frame, text="Clear", command=self._clear_console,
+                  bg="#444", fg=FG, relief="flat",
+                  activebackground="#555", activeforeground="white",
                   font=("Helvetica", 9)).pack(side="bottom", anchor="e",
                                                padx=4, pady=2)
 
-    # ── Server CRUD ───────────────────────────────────────────────
+    # ── CRUD ──────────────────────────────────────────────────────
 
     def _refresh_server_list(self):
         for item in self._tree.get_children():
             self._tree.delete(item)
-
         for i, s in enumerate(self.servers):
             addr = ",".join(s.endpoint.addresses) if s.endpoint.addresses else ""
-            active = (self.client.is_connected()
-                      and self.client.status.server_name == s.name)
-            status = "connected" if active else "idle"
-            tag = "connected" if active else ""
-
+            active = self.client.is_connected() and self.client.status.server_name == s.name
             self._tree.insert("", "end", iid=str(i), values=(
                 s.name, s.endpoint.hostname, addr,
-                s.endpoint.username, status,
-            ), tags=(tag,))
-
-        self._tree.tag_configure("connected",
-                                 background="#1a3a2a",
+                s.endpoint.username, "connected" if active else "idle",
+            ), tags=("connected" if active else "",))
+        self._tree.tag_configure("connected", background="#1a3a2a",
                                  foreground=SUCCESS_GREEN)
 
     def _save_and_refresh(self):
@@ -366,20 +319,19 @@ class TrustTunnelWindow(tk.Tk):
 
     def _edit_server(self):
         if self._selected_index is None:
-            messagebox.showinfo("Select Server", "Select a server to edit first.")
+            messagebox.showinfo("Note", "Select a server to edit first.")
             return
-        profile = self.servers[self._selected_index]
-        dlg = AddEditDialog(self, profile=profile)
+        dlg = AddEditDialog(self, profile=self.servers[self._selected_index])
         if dlg.result:
             self.servers[self._selected_index] = dlg.result
             self._save_and_refresh()
 
     def _delete_server(self):
         if self._selected_index is None:
-            messagebox.showinfo("Select Server", "Select a server to delete first.")
+            messagebox.showinfo("Note", "Select a server to delete first.")
             return
-        profile = self.servers[self._selected_index]
-        if messagebox.askyesno("Delete", f"Delete '{profile.name}'?", parent=self):
+        s = self.servers[self._selected_index]
+        if messagebox.askyesno("Delete", f"Delete '{s.name}'?", parent=self):
             self.servers.pop(self._selected_index)
             self._selected_index = None
             self._save_and_refresh()
@@ -387,33 +339,30 @@ class TrustTunnelWindow(tk.Tk):
     def _import_deeplink(self):
         dlg = tk.Toplevel(self)
         dlg.title("Import Deep-Link")
-        dlg.configure(bg=BG)
+        dlg.configure(bg="#252525")
         dlg.transient(self)
         dlg.grab_set()
         dlg.resizable(False, False)
 
-        frame = tk.Frame(dlg, bg=BG, padx=16, pady=12)
-        frame.pack(fill="both", expand=True)
+        f = tk.Frame(dlg, bg="#252525", padx=16, pady=12)
+        f.pack(fill="both", expand=True)
 
-        tk.Label(frame, text="Paste tt://? deep-link:", bg=BG, fg=FG,
-                 anchor="w").pack(fill="x")
+        tk.Label(f, text="Paste tt://? deep-link:", bg="#252525", fg="#ccc",
+                 anchor="w", font=("Helvetica", 10)).pack(fill="x")
 
-        entry = tk.Text(frame, height=2, width=55, bg=INPUT_BG, fg=FG,
-                        insertbackground=FG, relief="flat", borderwidth=4,
-                        font=("Menlo", 9))
-        entry.pack(fill="x", pady=6)
-
+        e = tk.Text(f, height=2, width=55, bg="#1a1a1a", fg="#e0e0e0",
+                    insertbackground="#e0e0e0", relief="solid", borderwidth=1,
+                    font=("Menlo", 9))
+        e.pack(fill="x", pady=6)
         try:
-            clipboard = self.clipboard_get()
-            entry.insert("1.0", clipboard)
+            e.insert("1.0", self.clipboard_get())
         except Exception:
             pass
 
         def do_import():
-            uri = entry.get("1.0", "end-1c").strip()
+            uri = e.get("1.0", "end-1c").strip()
             if not uri:
-                dlg.destroy()
-                return
+                dlg.destroy(); return
             profile = parse_deeplink(uri)
             if profile:
                 self.servers.append(profile)
@@ -421,67 +370,41 @@ class TrustTunnelWindow(tk.Tk):
                 self._log(f"Imported: {profile.name}")
                 dlg.destroy()
             else:
-                messagebox.showwarning("Parse Error",
-                                       "Could not parse deep-link.", parent=dlg)
+                messagebox.showwarning("Error", "Could not parse deep-link.", parent=dlg)
 
-        btn_frame = tk.Frame(frame, bg=BG)
-        btn_frame.pack(fill="x", pady=(8, 0))
-        tk.Button(btn_frame, text="Cancel", command=dlg.destroy,
-                  bg=BTN_BG, fg=FG, relief="flat",
-                  activebackground=BTN_HOVER, activeforeground=FG,
-                  padx=12).pack(side="left", padx=(0, 8))
-        tk.Button(btn_frame, text="Import", command=do_import,
+        bf = tk.Frame(f, bg="#252525")
+        bf.pack(fill="x", pady=(8, 0))
+        tk.Button(bf, text="Cancel", command=dlg.destroy,
+                  bg="#555", fg="#ccc", relief="flat",
+                  activebackground="#666", activeforeground="white",
+                  padx=12).pack(side="left", padx=(0, 10))
+        tk.Button(bf, text="Import", command=do_import,
                   bg=ACCENT, fg="white", relief="flat",
-                  activebackground=ACCENT_HOVER, activeforeground="white",
+                  activebackground="#1a8ae8", activeforeground="white",
                   padx=16).pack(side="left")
-
-        dlg.update_idletasks()
-        w, h = dlg.winfo_reqwidth() + 20, dlg.winfo_reqheight() + 10
-        dlg.geometry(f"{max(w, 480)}x{max(h, 150)}")
-        px = self.winfo_rootx(); py = self.winfo_rooty()
-        pw = self.winfo_width(); ph = self.winfo_height()
-        dlg.geometry(f"+{px + (pw - w) // 2}+{py + (ph - h) // 2}")
 
     # ── Connection ─────────────────────────────────────────────────
 
     def _connect_selected(self):
         if self._selected_index is None:
-            messagebox.showinfo("Select Server", "Select a server first.")
+            messagebox.showinfo("Note", "Select a server first.")
             return
         profile = self.servers[self._selected_index]
-        self._log(f"Connecting to {profile.name}...")
-        self._update_buttons("connecting")
+        self._log(f"--- Connecting to {profile.name} ---")
 
         def do_connect():
             success = self.client.connect(profile)
             self.after(0, lambda: self._log(
                 f"ERROR: {self.client.status.error}" if not success
-                else f"Connected to {profile.name}"
-            ))
+                else f"Connected to {profile.name}"))
             self.after(0, self._refresh_server_list)
-            self.after(0, self._update_buttons)
 
         threading.Thread(target=do_connect, daemon=True).start()
 
     def _disconnect(self):
-        self._log("Disconnecting...")
+        self._log("--- Disconnecting ---")
         self.client.disconnect()
         self._refresh_server_list()
-        self._update_buttons()
-
-    def _update_buttons(self, state=None):
-        """Show/hide connect/disconnect based on actual client state."""
-        if state is None:
-            connected = self.client.is_connected()
-        else:
-            connected = (state == "connecting")
-
-        if connected:
-            self._btn_connect.pack_forget()
-            self._btn_disconnect.pack(side="right", padx=2)
-        else:
-            self._btn_disconnect.pack_forget()
-            self._btn_connect.pack(side="right", padx=2)
 
     # ── Console ────────────────────────────────────────────────────
 
@@ -503,29 +426,23 @@ class TrustTunnelWindow(tk.Tk):
             status = self.client.status
             state = status.state
 
-            dot_map = {ClientState.DISCONNECTED: ("  ", "#666"),
-                       ClientState.CHECKING: ("*", WARNING_YELLOW),
-                       ClientState.CONNECTING: ("*", WARNING_YELLOW),
-                       ClientState.CONNECTED: ("*", SUCCESS_GREEN),
-                       ClientState.ERROR: ("!", ERROR_RED)}
-            dot, color = dot_map.get(state, ("  ", "#666"))
-
-            label_map = {ClientState.DISCONNECTED: "Disconnected",
-                         ClientState.CHECKING: "Checking...",
-                         ClientState.CONNECTING: f"Connecting [{status.phase.value}]",
-                         ClientState.CONNECTED: f"Connected - {status.server_name}",
-                         ClientState.ERROR: "Error"}
-            label = label_map.get(state, state.value)
+            dots = {ClientState.DISCONNECTED: ("", "#666", "Disconnected"),
+                    ClientState.CHECKING: ("\u25cf", WARNING_YELLOW, "Checking..."),
+                    ClientState.CONNECTING: ("\u25cf", WARNING_YELLOW,
+                                             f"Connecting [{status.phase.value}]"),
+                    ClientState.CONNECTED: ("\u25cf", SUCCESS_GREEN,
+                                            f"Connected - {status.server_name}"),
+                    ClientState.ERROR: ("\u25cf", ERROR_RED, "Error")}
+            dot, color, label = dots.get(state, ("", "#666", state.value))
 
             self._status_dot.configure(text=dot, fg=color)
-            self._status_label.configure(text=label, fg=color)
+            self._status_text.configure(text=label, fg=color)
 
-            # Append new log lines
+            # Log new lines
             lines = status.log_lines
             if not hasattr(self, "_log_idx"):
                 self._log_idx = 0
-            new_lines = lines[self._log_idx:]
-            for line in new_lines:
+            for line in lines[self._log_idx:]:
                 self._log(line)
             self._log_idx = len(lines)
 
@@ -542,15 +459,11 @@ class TrustTunnelWindow(tk.Tk):
 
         except Exception:
             pass
-
         self.after(300, self._poll_status)
-
-    # ── Lifecycle ──────────────────────────────────────────────────
 
     def _on_close(self):
         if self.client.is_connected():
-            if messagebox.askyesno("Quit", "VPN is connected. Disconnect and quit?",
-                                   parent=self):
+            if messagebox.askyesno("Quit", "Disconnect and quit?", parent=self):
                 self.client.disconnect()
             else:
                 return
