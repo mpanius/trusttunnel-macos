@@ -37,6 +37,12 @@ def _setup_styles():
               foreground=[("selected", "white")])
 
     style.configure("DarkConsole.TFrame", background="#0d0d0d")
+    style.configure("TNotebook", background="#1e1e1e", borderwidth=0)
+    style.configure("TNotebook.Tab", background="#2a2a2a", foreground="#d4d4d4",
+                    padding=[16, 6], borderwidth=0)
+    style.map("TNotebook.Tab",
+              background=[("selected", "#1e1e1e")],
+              foreground=[("selected", "#ffffff")])
 
 
 # ── colours for tk widgets that don't use ttk ─────────────────────
@@ -212,11 +218,18 @@ class TrustTunnelWindow(tk.Tk):
                                      fg="#888", font=("Helvetica", 10))
         self._status_text.pack(side="left", padx=4)
 
-        # ── Server table ──
-        table_frame = tk.LabelFrame(self, text=" Servers ", bg=BG, fg="#888",
+        # ── Notebook: Servers + Bypass tabs ──
+        self._notebook = ttk.Notebook(self)
+        self._notebook.pack(fill="both", expand=True, padx=8, pady=(4, 0))
+
+        # ── Tab 1: Servers ──
+        servers_tab = tk.Frame(self._notebook, bg=BG)
+        self._notebook.add(servers_tab, text="Servers")
+
+        table_frame = tk.LabelFrame(servers_tab, text=" Servers ", bg=BG, fg="#888",
                                     font=("Helvetica", 9, "bold"),
                                     padx=4, pady=4)
-        table_frame.pack(fill="both", expand=True, padx=8, pady=(4, 0))
+        table_frame.pack(fill="both", expand=True)
 
         cols = ("name", "hostname", "address", "username", "status")
         self._tree = ttk.Treeview(table_frame, columns=cols,
@@ -239,6 +252,60 @@ class TrustTunnelWindow(tk.Tk):
         self._tree.configure(yscrollcommand=vsb.set)
         self._tree.bind("<<TreeviewSelect>>", self._on_server_select)
         self._tree.bind("<Double-1>", lambda e: self._connect_selected())
+
+        # ── Tab 2: Bypass ──
+        bypass_tab = tk.Frame(self._notebook, bg=BG)
+        self._notebook.add(bypass_tab, text="Bypass")
+
+        bypass_info = tk.Label(bypass_tab, bg=BG, fg="#888",
+                               text="Domains and IPs that will bypass the VPN tunnel.\n"
+                                    "Use masks: *.ru, *.example.com, 192.168.0.0/16, *:443",
+                               font=("Helvetica", 9), justify="left", anchor="w")
+        bypass_info.pack(fill="x", padx=8, pady=(8, 4))
+
+        # Exclusions list
+        exc_list_frame = tk.Frame(bypass_tab, bg=BG)
+        exc_list_frame.pack(fill="both", expand=True, padx=8)
+
+        self._bypass_list = tk.Listbox(exc_list_frame, bg="#2d2d2d", fg=FG,
+                                       selectbackground=ACCENT, selectforeground="white",
+                                       relief="flat", borderwidth=4,
+                                       font=("Menlo", 10), activestyle="none")
+        self._bypass_list.pack(fill="both", expand=True, side="left")
+
+        exc_sb = ttk.Scrollbar(exc_list_frame, orient="vertical",
+                              command=self._bypass_list.yview)
+        exc_sb.pack(side="right", fill="y")
+        self._bypass_list.configure(yscrollcommand=exc_sb.set)
+
+        # Add / Delete row
+        exc_ctrl = tk.Frame(bypass_tab, bg=BG)
+        exc_ctrl.pack(fill="x", padx=8, pady=(4, 8))
+
+        self._bypass_entry = tk.Entry(exc_ctrl, bg="#1a1a1a", fg="#e0e0e0",
+                                      insertbackground="#e0e0e0",
+                                      relief="solid", borderwidth=1,
+                                      font=("Menlo", 10))
+        self._bypass_entry.pack(side="left", fill="x", expand=True, padx=(0, 6))
+        self._bypass_entry.bind("<Return>", lambda e: self._add_exclusion())
+
+        tk.Button(exc_ctrl, text="Add", command=self._add_exclusion,
+                  bg=ACCENT, fg="white", relief="flat",
+                  activebackground="#1a8ae8", activeforeground="white",
+                  font=("Helvetica", 10), padx=12, pady=3).pack(side="left", padx=2)
+
+        tk.Button(exc_ctrl, text="Delete", command=self._delete_exclusion,
+                  bg="#444", fg=FG, relief="flat",
+                  activebackground="#555", activeforeground="white",
+                  font=("Helvetica", 10), padx=12, pady=3).pack(side="left", padx=2)
+
+        self._bypass_status = tk.Label(bypass_tab, bg=BG, fg="#888",
+                                       text="Select a server to manage bypass rules.",
+                                       font=("Helvetica", 9), anchor="w")
+        self._bypass_status.pack(fill="x", padx=8, pady=(0, 4))
+
+        # Wire tab change to refresh bypass list
+        self._notebook.bind("<<NotebookTabChanged>>", self._on_tab_changed)
 
         # ── Buttons ──
         btn_bar = tk.Frame(self, bg=BG)
@@ -312,6 +379,63 @@ class TrustTunnelWindow(tk.Tk):
     def _on_server_select(self, event=None):
         sel = self._tree.selection()
         self._selected_index = int(sel[0]) if sel else None
+        self._refresh_bypass_list()
+
+    # ── Bypass (exclusions) ──────────────────────────────────────
+
+    def _on_tab_changed(self, event=None):
+        self._refresh_bypass_list()
+
+    def _refresh_bypass_list(self):
+        """Reload exclusions for the selected server."""
+        self._bypass_list.delete(0, "end")
+        if self._selected_index is None:
+            self._bypass_status.configure(
+                text="Select a server in the Servers tab to manage bypass rules.",
+                fg="#888")
+            return
+
+        profile = self.servers[self._selected_index]
+        exclusions = profile.exclusions
+
+        self._bypass_status.configure(
+            text=f"Bypass rules for: {profile.name} ({len(exclusions)} rules)",
+            fg="#888")
+
+        for exc in exclusions:
+            self._bypass_list.insert("end", f"  {exc}")
+
+    def _add_exclusion(self):
+        """Add a new exclusion mask."""
+        mask = self._bypass_entry.get().strip()
+        if not mask:
+            return
+        if self._selected_index is None:
+            messagebox.showinfo("Note", "Select a server in the Servers tab first.")
+            return
+
+        profile = self.servers[self._selected_index]
+        if mask not in profile.exclusions:
+            profile.exclusions.append(mask)
+            profile.exclusions.sort()
+            self._bypass_entry.delete(0, "end")
+            save_servers(self.servers)
+            self._refresh_bypass_list()
+
+    def _delete_exclusion(self):
+        """Delete selected exclusion."""
+        sel = self._bypass_list.curselection()
+        if not sel:
+            return
+        if self._selected_index is None:
+            return
+
+        profile = self.servers[self._selected_index]
+        idx = sel[0]
+        if 0 <= idx < len(profile.exclusions):
+            profile.exclusions.pop(idx)
+            save_servers(self.servers)
+            self._refresh_bypass_list()
 
     def _add_server(self):
         dlg = AddEditDialog(self)
