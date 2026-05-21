@@ -1,119 +1,98 @@
 # TrustTunnel macOS GUI
 
-A native-feeling macOS menu bar client for the [TrustTunnel VPN protocol](https://github.com/TrustTunnel/TrustTunnel).
-
-Sits in your menu bar. Connect/disconnect in one click. Full protocol features exposed.
+A native macOS windowed client for the [TrustTunnel VPN protocol](https://github.com/TrustTunnel/TrustTunnel).
+Dark-themed, with server management, split tunneling, and embedded console.
 
 ## Features
 
-- **HTTP/2 & HTTP/3 (QUIC)** protocol support
-- **TUN system-wide VPN** — routes all traffic through the tunnel
-- **SOCKS5 proxy mode** — per-app routing
-- **Split tunneling** with domain/IP/CIDR exclusion lists (general & selective modes)
-- **Custom DNS** — plain UDP, DNS over TLS (DoT), DNS over HTTPS (DoH), DNS over QUIC (DoQ), DNS over TCP
-- **Kill switch** — blocks traffic when VPN disconnects
-- **Post-quantum key exchange** — X25519Kyber768
-- **Anti-DPI** — deep packet inspection evasion
-- **Deep-link import** — paste `tt://?` URIs from endpoint exports
-- **Multi-server profile management** — save, edit, switch between servers
+- **Windowed UI** — traditional macOS window with resizable server list and console
+- **Multi-server profiles** — add, edit, delete, import from `tt://?` deep-links
+- **Tabs** — Servers (manage connections) + Bypass (split tunneling exclusion masks)
+- **Split tunneling** — bypass VPN for specific domains: `*.ru`, `*.example.com`, CIDR, `*:port`
+- **Embedded console** — real-time VPN output in-app, no separate terminal
+- **Kill switch, Post-Quantum, Anti-DPI** — full protocol feature support
+- **HTTP/2 & HTTP/3 (QUIC)** protocol selection
+- **DNS configuration** — plain UDP, DoT, DoH, DoQ, DoTCP
+- **Deep-link import** — paste `tt://?` URIs from endpoint exports (TOML-base64 + native TLV)
 
 ## Requirements
 
-- macOS 12 (Monterey) or later
-- Python 3.9+
-- [TrustTunnel CLI Client](https://github.com/TrustTunnel/TrustTunnelClient) installed
+- macOS 11 (Big Sur) or later
+- [TrustTunnel CLI Client](https://github.com/TrustTunnel/TrustTunnelClient) installed separately
 
-## Quick Install
+## Install (pre-built .app)
+
+Download the latest `TrustTunnel.app` from [Releases](https://github.com/inhale/trusttunnel-macos/releases),
+drag to `/Applications`, double-click. No terminal, no Python needed.
+
+## Build from source
+
+Requires Python 3.11+ with Tkinter 8.6+ (Homebrew Python recommended):
 
 ```bash
-# 1. Install TrustTunnel CLI client
-curl -fsSL https://raw.githubusercontent.com/TrustTunnel/TrustTunnelClient/refs/heads/master/scripts/install.sh | sh -s -
-
-# 2. Install this GUI
-git clone https://github.com/YOUR_USER/trusttunnel-macos.git
+# 1. Clone
+git clone https://github.com/inhale/trusttunnel-macos.git
 cd trusttunnel-macos
-python3 -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
-pip install -e .
+
+# 2. One-command build
+./build-app.sh
 ```
 
-### Run
+Output: `dist/TrustTunnel.app` — double-click to run.
+
+### Dev run (no build)
 
 ```bash
-# From the project directory with venv active:
-python3 -m src.app
+# Install deps
+/usr/local/bin/python3.11 -m pip install toml
 
-# Or if installed via pip:
-trusttunnel-gui
+# Run
+/usr/local/bin/python3.11 -m src
 ```
-
-### Auto-start on login
-
-Add to System Settings → General → Login Items:
-- Application: `/path/to/trusttunnel-macos/.venv/bin/python3`
-- Arguments: `-m src.app`
-
-Or use the included launch agent:
-
-```bash
-mkdir -p ~/Library/LaunchAgents
-cp com.trusttunnel.gui.plist ~/Library/LaunchAgents/
-launchctl load ~/Library/LaunchAgents/com.trusttunnel.gui.plist
-```
-
-Edit the plist to match your install path first.
 
 ## Usage
 
-1. Click the 🔒 icon in your menu bar
-2. **Servers → Add Server** — enter your endpoint details
-3. Or **Servers → Import from deep-link** — paste a `tt://?` URI
-4. Click your server name to connect
-5. Toggle settings (protocol, kill switch, DNS, exclusions) while connected
+1. Launch TrustTunnel.app (or `python3 -m src`)
+2. **Servers tab** → + Add — fill in name, hostname, address, username, password
+3. Or **Import Link** — paste a `tt://?` deep-link from your endpoint
+4. Select a server → **Connect**
+5. **Bypass tab** — add domain masks (`*.ru`, `*.example.com`) to exclude from VPN
 
-### Adding a server manually
-
-```
-Name: My VPN
-Hostname: vpn.example.com
-Address: 192.168.1.100:443
-Username: myuser
-Password: mypassword
-```
-
-### Importing from endpoint
-
-On your TrustTunnel endpoint, export a client config:
+### Exporting deep-link from your endpoint
 
 ```bash
 cd /opt/trusttunnel
-./trusttunnel_endpoint vpn.toml hosts.toml -c my-client -a vpn.example.com
+sudo ./trusttunnel_endpoint vpn.toml hosts.toml -c myuser -a <PUBLIC_IP>:8443
 ```
 
-This prints a `tt://?` URI. Copy it, then in the GUI: Servers → Import from deep-link.
+Copy the `tt://?` URI, use Import Link in the app.
+
+### Bypass / Split Tunneling
+
+In the **Bypass** tab, add exclusion masks. These sites will NOT go through the VPN:
+
+| Mask | Effect |
+|---|---|
+| `*.ru` | All `.ru` domains bypass |
+| `*.google.com` | Google services bypass |
+| `192.168.0.0/16` | Local network bypass |
+| `*:443` | All HTTPS traffic bypass |
+
+## File locations
+
+- Settings: `~/.trusttunnel-gui/servers.toml`
+- Build output: `dist/TrustTunnel.app`
 
 ## Architecture
 
 ```
-┌─────────────────────────────────────┐
-│  trusttunnel-macos (rumps menu bar) │
-│  ┌───────────┐  ┌────────────────┐  │
-│  │ config.py │  │  client.py     │  │
-│  │ (TOML)    │  │  (subprocess)  │  │
-│  └───────────┘  └───────┬────────┘  │
-│                         │           │
-│                 sudo trusttunnel_   │
-│                 client -c config    │
-└─────────────────────────┼───────────┘
-                          │
-                   ┌──────▼──────┐
-                   │  TUN device │
-                   │  or SOCKS5  │
-                   └─────────────┘
+TrustTunnel.app
+├── src/app.py         — Tkinter window, tabs, UI
+├── src/client.py      — trusttunnel_client subprocess manager
+├── src/config.py      — TOML profiles, deep-link parser
+├── trusttunnel.spec   — PyInstaller build config
+└── build-app.sh       — one-command .app builder
 ```
-
-Settings stored in `~/.trusttunnel-gui/servers.toml`.
 
 ## License
 

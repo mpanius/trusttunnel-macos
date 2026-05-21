@@ -141,8 +141,8 @@ class AddEditDialog(tk.Toplevel):
         btn_frame.pack(fill="x", pady=(16, 0))
 
         tk.Button(btn_frame, text="Cancel", command=self.destroy,
-                  bg="#555", fg="#ccc", relief="flat",
-                  activebackground="#666", activeforeground="white",
+                  bg="#555", fg="#ffffff", relief="flat",
+                  activebackground="#666", activeforeground="#ffffff",
                   font=("Helvetica", 10), padx=14, pady=4).pack(
             side="left", padx=(0, 10))
 
@@ -219,8 +219,16 @@ class TrustTunnelWindow(tk.Tk):
         self._status_text.pack(side="left", padx=4)
 
         # ── Notebook: Servers + Bypass tabs ──
-        self._notebook = ttk.Notebook(self)
-        self._notebook.pack(fill="both", expand=True, padx=8, pady=(4, 0))
+        # PanedWindow wraps notebook + console for resizable split
+        self._main_pane = ttk.PanedWindow(self, orient="vertical")
+        self._main_pane.pack(fill="both", expand=True, padx=8, pady=(4, 0))
+
+        # Top pane: notebook
+        notebook_frame = tk.Frame(self._main_pane, bg=BG)
+        self._main_pane.add(notebook_frame, weight=3)
+
+        self._notebook = ttk.Notebook(notebook_frame)
+        self._notebook.pack(fill="both", expand=True)
 
         # ── Tab 1: Servers ──
         servers_tab = tk.Frame(self._notebook, bg=BG)
@@ -295,8 +303,8 @@ class TrustTunnelWindow(tk.Tk):
                   font=("Helvetica", 10), padx=12, pady=3).pack(side="left", padx=2)
 
         tk.Button(exc_ctrl, text="Delete", command=self._delete_exclusion,
-                  bg="#444", fg=FG, relief="flat",
-                  activebackground="#555", activeforeground="white",
+                  bg="#555", fg="#ffffff", relief="flat",
+                  activebackground="#666", activeforeground="#ffffff",
                   font=("Helvetica", 10), padx=12, pady=3).pack(side="left", padx=2)
 
         self._bypass_status = tk.Label(bypass_tab, bg=BG, fg="#888",
@@ -313,11 +321,11 @@ class TrustTunnelWindow(tk.Tk):
 
         def btn(text, cmd, accent=False):
             return tk.Button(btn_bar, text=text, command=cmd,
-                             bg=ACCENT if accent else "#444",
-                             fg="white" if accent else FG,
+                             bg=ACCENT if accent else "#555",
+                             fg="#ffffff",
                              relief="flat",
-                             activebackground="#1a8ae8" if accent else "#555",
-                             activeforeground="white",
+                             activebackground="#1a8ae8" if accent else "#666",
+                             activeforeground="#ffffff",
                              font=("Helvetica", 10, "bold" if accent else "normal"),
                              padx=12, pady=4)
 
@@ -333,11 +341,11 @@ class TrustTunnelWindow(tk.Tk):
         self._btn_disconnect.configure(bg=ERROR_RED,
                                        activebackground="#d63a3a")
 
-        # ── Console ──
-        cons_frame = tk.LabelFrame(self, text=" Console ", bg=BG, fg="#888",
+        # ── Console (bottom pane of PanedWindow) ──
+        cons_frame = tk.LabelFrame(self._main_pane, text=" Console ", bg=BG, fg="#888",
                                    font=("Helvetica", 9, "bold"),
                                    padx=4, pady=4)
-        cons_frame.pack(fill="both", expand=False, padx=8, pady=(4, 8))
+        self._main_pane.add(cons_frame, weight=1)
 
         self._console = tk.Text(cons_frame, bg=CONSOLE_BG, fg="#a0a0a0",
                                 font=("Menlo", 10), wrap="word",
@@ -352,8 +360,8 @@ class TrustTunnelWindow(tk.Tk):
         self._console.configure(yscrollcommand=csb.set)
 
         tk.Button(cons_frame, text="Clear", command=self._clear_console,
-                  bg="#444", fg=FG, relief="flat",
-                  activebackground="#555", activeforeground="white",
+                  bg="#555", fg="#ffffff", relief="flat",
+                  activebackground="#666", activeforeground="#ffffff",
                   font=("Helvetica", 9)).pack(side="bottom", anchor="e",
                                                padx=4, pady=2)
 
