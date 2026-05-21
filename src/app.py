@@ -141,14 +141,14 @@ class AddEditDialog(tk.Toplevel):
         btn_frame.pack(fill="x", pady=(16, 0))
 
         tk.Button(btn_frame, text="Cancel", command=self.destroy,
-                  bg="#555", fg="#ffffff", relief="flat",
-                  activebackground="#666", activeforeground="#ffffff",
+                  bg="#3a3a3a", fg="#ffffff", relief="flat",
+                  activebackground="#4a4a4a", activeforeground="#ffffff",
                   font=("Helvetica", 10), padx=14, pady=4).pack(
             side="left", padx=(0, 10))
 
         tk.Button(btn_frame, text="Save", command=self._save,
-                  bg=ACCENT, fg="white", relief="flat",
-                  activebackground="#1a8ae8", activeforeground="white",
+                  bg=ACCENT, fg="#ffffff", relief="flat",
+                  activebackground="#1a8ae8", activeforeground="#ffffff",
                   font=("Helvetica", 10, "bold"), padx=20, pady=4).pack(
             side="left")
 
@@ -298,8 +298,8 @@ class TrustTunnelWindow(tk.Tk):
         self._bypass_entry.bind("<Return>", lambda e: self._add_exclusion())
 
         tk.Button(exc_ctrl, text="Add", command=self._add_exclusion,
-                  bg=ACCENT, fg="white", relief="flat",
-                  activebackground="#1a8ae8", activeforeground="white",
+                  bg=ACCENT, fg="#ffffff", relief="flat",
+                  activebackground="#1a8ae8", activeforeground="#ffffff",
                   font=("Helvetica", 10), padx=12, pady=3).pack(side="left", padx=2)
 
         tk.Button(exc_ctrl, text="Delete", command=self._delete_exclusion,
@@ -315,16 +315,16 @@ class TrustTunnelWindow(tk.Tk):
         # Wire tab change to refresh bypass list
         self._notebook.bind("<<NotebookTabChanged>>", self._on_tab_changed)
 
-        # ── Buttons ──
-        btn_bar = tk.Frame(self, bg=BG)
-        btn_bar.pack(fill="x", padx=8, pady=4)
+        # ── Buttons (between tabs and console, inside top pane) ──
+        btn_bar = tk.Frame(notebook_frame, bg=BG)
+        btn_bar.pack(fill="x", pady=4)
 
         def btn(text, cmd, accent=False):
             return tk.Button(btn_bar, text=text, command=cmd,
-                             bg=ACCENT if accent else "#555",
+                             bg=ACCENT if accent else "#3a3a3a",
                              fg="#ffffff",
                              relief="flat",
-                             activebackground="#1a8ae8" if accent else "#666",
+                             activebackground="#1a8ae8" if accent else "#4a4a4a",
                              activeforeground="#ffffff",
                              font=("Helvetica", 10, "bold" if accent else "normal"),
                              padx=12, pady=4)
@@ -360,8 +360,8 @@ class TrustTunnelWindow(tk.Tk):
         self._console.configure(yscrollcommand=csb.set)
 
         tk.Button(cons_frame, text="Clear", command=self._clear_console,
-                  bg="#555", fg="#ffffff", relief="flat",
-                  activebackground="#666", activeforeground="#ffffff",
+                  bg="#3a3a3a", fg="#ffffff", relief="flat",
+                  activebackground="#4a4a4a", activeforeground="#ffffff",
                   font=("Helvetica", 9)).pack(side="bottom", anchor="e",
                                                padx=4, pady=2)
 
@@ -514,12 +514,12 @@ class TrustTunnelWindow(tk.Tk):
         bf = tk.Frame(f, bg="#252525")
         bf.pack(fill="x", pady=(8, 0))
         tk.Button(bf, text="Cancel", command=dlg.destroy,
-                  bg="#555", fg="#ccc", relief="flat",
-                  activebackground="#666", activeforeground="white",
+                  bg="#3a3a3a", fg="#ffffff", relief="flat",
+                  activebackground="#4a4a4a", activeforeground="#ffffff",
                   padx=12).pack(side="left", padx=(0, 10))
         tk.Button(bf, text="Import", command=do_import,
-                  bg=ACCENT, fg="white", relief="flat",
-                  activebackground="#1a8ae8", activeforeground="white",
+                  bg=ACCENT, fg="#ffffff", relief="flat",
+                  activebackground="#1a8ae8", activeforeground="#ffffff",
                   padx=16).pack(side="left")
 
     # ── Connection ─────────────────────────────────────────────────
