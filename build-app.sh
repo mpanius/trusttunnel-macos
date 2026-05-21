@@ -118,7 +118,7 @@ echo ""
 echo "=== Building .app ==="
 "$PYTHON" -m PyInstaller trusttunnel.spec --clean --noconfirm 2>&1
 
-# 5. Result
+# 5. Result + install
 echo ""
 echo "=== Done ==="
 APP="dist/TrustTunnel.app"
@@ -126,11 +126,20 @@ if [ -d "$APP" ]; then
     SIZE=$(du -sh "$APP" | cut -f1)
     echo "App:  $SCRIPT_DIR/$APP  ($SIZE)"
     echo ""
-    echo "To install:"
-    echo "  cp -r \"$APP\" /Applications/"
+    echo "Copy to /Applications?"
+    read -p "  [Y/n]: " answer
+    if [ "${answer:-y}" = "y" ] || [ "${answer:-y}" = "Y" ] || [ -z "$answer" ]; then
+        rm -rf /Applications/TrustTunnel.app
+        cp -R "$APP" /Applications/
+        echo "  → Copied to /Applications/TrustTunnel.app"
+        echo ""
+        echo "  Sudo setup (one-time, required for VPN):"
+        echo "    sudo bash -c 'echo \"$(whoami) ALL=(ALL) NOPASSWD: /Applications/TrustTunnel.app/Contents/Resources/bin/trusttunnel_client\" > /etc/sudoers.d/trusttunnel'"
+    else
+        echo "  To install later: cp -r \"$APP\" /Applications/"
+    fi
     echo ""
-    echo "To share with others:"
-    echo "  zip -r TrustTunnel-macOS.zip \"$APP\""
+    echo "To share: zip -r TrustTunnel-macOS.zip \"$APP\""
 else
     echo "ERROR: Build failed. Check output above."
     exit 1

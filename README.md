@@ -19,6 +19,37 @@ Dark-themed, with server management, split tunneling, and embedded console.
 
 - macOS 11 (Big Sur) or later
 - No other dependencies — TrustTunnel CLI client is bundled in the .app
+- **Sudo setup** (one-time, see below)
+
+## Why sudo?
+
+TrustTunnel creates a virtual network interface (`utun`) for system-wide VPN routing.
+This requires root privileges. There are only three ways to do this on macOS:
+
+| Approach | Effort | Security | Status |
+|---|---|---|---|
+| **sudoers NOPASSWD** | 1 command | ★★★★ | ✅ This app |
+| SUID bit (`chmod u+s`) | 1 command | ★★★ | ⚠️ macOS strips SUID on .app bundles |
+| Privileged Helper (SMJobBless) | Apple dev account + code signing | ★★★★★ | 🔮 v2 roadmap |
+
+This app uses **sudoers NOPASSWD** — the standard approach for tools like Wireshark, VirtualBox, and Docker.
+
+## Sudo setup (one-time, 30 seconds)
+
+```bash
+./setup-sudo.sh
+```
+
+Or manually:
+
+```bash
+sudo bash -c 'echo "$(whoami) ALL=(ALL) NOPASSWD: /Applications/TrustTunnel.app/Contents/Resources/bin/trusttunnel_client" > /etc/sudoers.d/trusttunnel'
+```
+
+What this does: tells macOS "user X can run this specific binary as root without a password."
+It is NOT a blanket "run anything as root" — only that one binary.
+
+After setup, TrustTunnel.app works without any password prompts.
 
 ## Install (pre-built .app)
 
