@@ -24,8 +24,25 @@ def _setup_styles():
     style.configure("DarkTitle.TLabel", background="#252525", foreground="#d4d4d4")
     style.configure("DarkBold.TLabel", background="#1e1e1e", foreground="#d4d4d4",
                     font=("Helvetica", 11, "bold"))
-    style.configure("Accent.TButton", background="#0078d4", foreground="white",
+    style.configure("Accent.TButton", background="#0078d4", foreground="#ffffff",
                     font=("Helvetica", 11, "bold"))
+    style.map("Accent.TButton",
+              background=[("active", "#1a8ae8")])
+
+    style.configure("Dark.TButton", background="#3a3a3a", foreground="#ffffff",
+                    font=("Helvetica", 11), borderwidth=0)
+    style.map("Dark.TButton",
+              background=[("active", "#4a4a4a")])
+
+    style.configure("Red.TButton", background="#f44747", foreground="#ffffff",
+                    font=("Helvetica", 11, "bold"))
+    style.map("Red.TButton",
+              background=[("active", "#d63a3a")])
+
+    style.configure("SmallDark.TButton", background="#3a3a3a", foreground="#ffffff",
+                    font=("Helvetica", 9), borderwidth=0)
+    style.map("SmallDark.TButton",
+              background=[("active", "#4a4a4a")])
 
     style.configure("Treeview", background="#2d2d2d", foreground="#d4d4d4",
                     fieldbackground="#2d2d2d", rowheight=26, borderwidth=0)
@@ -140,17 +157,11 @@ class AddEditDialog(tk.Toplevel):
         btn_frame = tk.Frame(form, bg="#2a2a2a")
         btn_frame.pack(fill="x", pady=(16, 0))
 
-        tk.Button(btn_frame, text="Cancel", command=self.destroy,
-                  bg="#3a3a3a", fg="#ffffff", relief="flat",
-                  activebackground="#4a4a4a", activeforeground="#ffffff",
-                  font=("Helvetica", 10), padx=14, pady=4).pack(
-            side="left", padx=(0, 10))
+        ttk.Button(btn_frame, text="Cancel", command=self.destroy,
+                   style="Dark.TButton").pack(side="left", padx=(0, 10))
 
-        tk.Button(btn_frame, text="Save", command=self._save,
-                  bg=ACCENT, fg="#ffffff", relief="flat",
-                  activebackground="#1a8ae8", activeforeground="#ffffff",
-                  font=("Helvetica", 10, "bold"), padx=20, pady=4).pack(
-            side="left")
+        ttk.Button(btn_frame, text="Save", command=self._save,
+                   style="Accent.TButton").pack(side="left")
 
     def _save(self):
         name = self._entries["name"].get().strip()
@@ -297,15 +308,11 @@ class TrustTunnelWindow(tk.Tk):
         self._bypass_entry.pack(side="left", fill="x", expand=True, padx=(0, 6))
         self._bypass_entry.bind("<Return>", lambda e: self._add_exclusion())
 
-        tk.Button(exc_ctrl, text="Add", command=self._add_exclusion,
-                  bg=ACCENT, fg="#ffffff", relief="flat",
-                  activebackground="#1a8ae8", activeforeground="#ffffff",
-                  font=("Helvetica", 10), padx=12, pady=3).pack(side="left", padx=2)
+        ttk.Button(exc_ctrl, text="Add", command=self._add_exclusion,
+                   style="Accent.TButton").pack(side="left", padx=2)
 
-        tk.Button(exc_ctrl, text="Delete", command=self._delete_exclusion,
-                  bg="#555", fg="#ffffff", relief="flat",
-                  activebackground="#666", activeforeground="#ffffff",
-                  font=("Helvetica", 10), padx=12, pady=3).pack(side="left", padx=2)
+        ttk.Button(exc_ctrl, text="Delete", command=self._delete_exclusion,
+                   style="Dark.TButton").pack(side="left", padx=2)
 
         self._bypass_status = tk.Label(bypass_tab, bg=BG, fg="#888",
                                        text="Select a server to manage bypass rules.",
@@ -315,31 +322,27 @@ class TrustTunnelWindow(tk.Tk):
         # Wire tab change to refresh bypass list
         self._notebook.bind("<<NotebookTabChanged>>", self._on_tab_changed)
 
-        # ── Buttons (between tabs and console, inside top pane) ──
-        btn_bar = tk.Frame(notebook_frame, bg=BG)
-        btn_bar.pack(fill="x", pady=4)
+        # ── Buttons (outside PanedWindow — always visible) ──
+        btn_bar = tk.Frame(self, bg=BG)
+        btn_bar.pack(fill="x", padx=8, pady=(4, 0))
 
-        def btn(text, cmd, accent=False):
-            return tk.Button(btn_bar, text=text, command=cmd,
-                             bg=ACCENT if accent else "#3a3a3a",
-                             fg="#ffffff",
-                             relief="flat",
-                             activebackground="#1a8ae8" if accent else "#4a4a4a",
-                             activeforeground="#ffffff",
-                             font=("Helvetica", 10, "bold" if accent else "normal"),
-                             padx=12, pady=4)
+        ttk.Button(btn_bar, text="+ Add", command=self._add_server,
+                   style="Dark.TButton").pack(side="left", padx=1)
+        ttk.Button(btn_bar, text="Edit", command=self._edit_server,
+                   style="Dark.TButton").pack(side="left", padx=1)
+        ttk.Button(btn_bar, text="Delete", command=self._delete_server,
+                   style="Dark.TButton").pack(side="left", padx=1)
+        ttk.Button(btn_bar, text="Import Link", command=self._import_deeplink,
+                   style="Dark.TButton").pack(side="left", padx=1)
 
-        btn("+ Add", self._add_server).pack(side="left", padx=1)
-        btn("Edit", self._edit_server).pack(side="left", padx=1)
-        btn("Delete", self._delete_server).pack(side="left", padx=1)
-        btn("Import Link", self._import_deeplink).pack(side="left", padx=1)
-
-        self._btn_connect = btn("Connect", self._connect_selected, accent=True)
+        self._btn_connect = ttk.Button(btn_bar, text="Connect",
+                                       command=self._connect_selected,
+                                       style="Accent.TButton")
         self._btn_connect.pack(side="right", padx=2)
 
-        self._btn_disconnect = btn("Disconnect", self._disconnect, accent=False)
-        self._btn_disconnect.configure(bg=ERROR_RED,
-                                       activebackground="#d63a3a")
+        self._btn_disconnect = ttk.Button(btn_bar, text="Disconnect",
+                                          command=self._disconnect,
+                                          style="Red.TButton")
 
         # ── Console (bottom pane of PanedWindow) ──
         cons_frame = tk.LabelFrame(self._main_pane, text=" Console ", bg=BG, fg="#888",
@@ -359,11 +362,9 @@ class TrustTunnelWindow(tk.Tk):
         csb.pack(side="right", fill="y")
         self._console.configure(yscrollcommand=csb.set)
 
-        tk.Button(cons_frame, text="Clear", command=self._clear_console,
-                  bg="#3a3a3a", fg="#ffffff", relief="flat",
-                  activebackground="#4a4a4a", activeforeground="#ffffff",
-                  font=("Helvetica", 9)).pack(side="bottom", anchor="e",
-                                               padx=4, pady=2)
+        ttk.Button(cons_frame, text="Clear", command=self._clear_console,
+                   style="SmallDark.TButton").pack(side="bottom", anchor="e",
+                                                   padx=4, pady=2)
 
     # ── CRUD ──────────────────────────────────────────────────────
 
@@ -513,14 +514,10 @@ class TrustTunnelWindow(tk.Tk):
 
         bf = tk.Frame(f, bg="#252525")
         bf.pack(fill="x", pady=(8, 0))
-        tk.Button(bf, text="Cancel", command=dlg.destroy,
-                  bg="#3a3a3a", fg="#ffffff", relief="flat",
-                  activebackground="#4a4a4a", activeforeground="#ffffff",
-                  padx=12).pack(side="left", padx=(0, 10))
-        tk.Button(bf, text="Import", command=do_import,
-                  bg=ACCENT, fg="#ffffff", relief="flat",
-                  activebackground="#1a8ae8", activeforeground="#ffffff",
-                  padx=16).pack(side="left")
+        ttk.Button(bf, text="Cancel", command=dlg.destroy,
+                   style="Dark.TButton").pack(side="left", padx=(0, 10))
+        ttk.Button(bf, text="Import", command=do_import,
+                   style="Accent.TButton").pack(side="left")
 
     # ── Connection ─────────────────────────────────────────────────
 
