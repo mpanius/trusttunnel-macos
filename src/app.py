@@ -1,4 +1,4 @@
-"""TrustTunnel macOS GUI — traditional windowed app with server management and embedded console."""
+"""TrustTunnel macOS GUI — windowed app with server table, CRUD, embedded console."""
 
 import os
 import sys
@@ -14,7 +14,7 @@ from .config import (
 from .client import ClientManager, ClientState, ClientStatus
 
 
-# ── colour constants ──────────────────────────────────────────────
+# ── colours ───────────────────────────────────────────────────────
 BG = "#1e1e1e"
 FG = "#d4d4d4"
 ACCENT = "#0078d4"
@@ -22,61 +22,87 @@ ACCENT_HOVER = "#1a8ae8"
 ERROR_RED = "#f44747"
 SUCCESS_GREEN = "#4ec9b0"
 WARNING_YELLOW = "#cca700"
-ROW_ALT = "#2a2a2a"
 CONSOLE_BG = "#0d0d0d"
+INPUT_BG = "#2d2d2d"
+BTN_BG = "#3a3a3a"
+BTN_HOVER = "#4a4a4a"
 
 
 class AddEditDialog(tk.Toplevel):
-    """Modal dialog for adding or editing a server profile."""
+    """Modal dialog for adding/editing a server profile."""
 
     def __init__(self, parent, profile: Optional[ServerProfile] = None):
         super().__init__(parent)
         self.title("Edit Server" if profile else "Add Server")
-        self.geometry("500x480")
-        self.resizable(False, False)
         self.configure(bg=BG)
         self.result: Optional[ServerProfile] = None
-
         self._profile = profile
-        self._build()
+
+        # Make modal
         self.transient(parent)
         self.grab_set()
+
+        # Build inside a frame
+        self._build()
+
+        # Size to content
+        self.update_idletasks()
+        w = self.winfo_reqwidth() + 40
+        h = self.winfo_reqheight() + 20
+        self.geometry(f"{max(w, 440)}x{max(h, 380)}")
+        self.resizable(False, False)
+
+        # Center on parent
+        if parent:
+            px = parent.winfo_rootx()
+            py = parent.winfo_rooty()
+            pw = parent.winfo_width()
+            ph = parent.winfo_height()
+            self.geometry(f"+{px + (pw - w) // 2}+{py + (ph - h) // 2}")
+
         self.wait_window()
 
     def _build(self):
-        pad = {"padx": 12, "pady": 4}
+        frame = tk.Frame(self, bg=BG, padx=16, pady=12)
+        frame.pack(fill="both", expand=True)
 
         fields = [
-            ("Name:", "name", ""),
-            ("Hostname:", "hostname", ""),
-            ("Address (ip:port):", "address", ""),
-            ("Username:", "username", ""),
-            ("Password:", "password", ""),
-            ("Certificate (PEM):", "certificate", ""),
+            ("Name:", "name", False),
+            ("Hostname:", "hostname", False),
+            ("Address (ip:port):", "address", False),
+            ("Username:", "username", False),
+            ("Password:", "password", True),
+            ("Certificate (PEM, optional):", "certificate", False),
         ]
 
         self._entries = {}
+        for label_text, key, is_password in fields:
+            row_frame = tk.Frame(frame, bg=BG)
+            row_frame.pack(fill="x", pady=3)
 
-        row = 0
-        for label_text, key, default in fields:
-            lbl = tk.Label(self, text=label_text, bg=BG, fg=FG, anchor="w")
-            lbl.grid(row=row, column=0, sticky="w", **pad)
+            tk.Label(row_frame, text=label_text, bg=BG, fg=FG,
+                     anchor="w", width=22).pack(side="left")
 
             if key == "certificate":
-                entry = tk.Text(self, height=4, width=50, bg="#2d2d2d", fg=FG,
-                                insertbackground=FG, relief="flat", borderwidth=4)
-            elif key == "password":
-                entry = tk.Entry(self, show="*", width=40, bg="#2d2d2d", fg=FG,
-                                 insertbackground=FG, relief="flat")
+                entry = tk.Text(row_frame, height=4, width=42,
+                                bg=INPUT_BG, fg=FG, insertbackground=FG,
+                                relief="flat", borderwidth=4,
+                                font=("Menlo", 9))
+                entry.pack(side="left", fill="x", expand=True)
+            elif is_password:
+                entry = tk.Entry(row_frame, show="*", width=42,
+                                 bg=INPUT_BG, fg=FG, insertbackground=FG,
+                                 relief="flat")
+                entry.pack(side="left")
             else:
-                entry = tk.Entry(self, width=40, bg="#2d2d2d", fg=FG,
-                                 insertbackground=FG, relief="flat")
+                entry = tk.Entry(row_frame, width=42,
+                                 bg=INPUT_BG, fg=FG, insertbackground=FG,
+                                 relief="flat")
+                entry.pack(side="left")
 
-            entry.grid(row=row, column=1, sticky="ew", **pad)
             self._entries[key] = entry
-            row += 1
 
-        # Fill from existing profile
+        # Pre-fill from profile
         if self._profile:
             ep = self._profile.endpoint
             self._entries["name"].insert(0, self._profile.name)
@@ -88,22 +114,18 @@ class AddEditDialog(tk.Toplevel):
                 self._entries["certificate"].insert("1.0", ep.certificate)
 
         # Buttons
-        btn_frame = tk.Frame(self, bg=BG)
-        btn_frame.grid(row=row, column=0, columnspan=2, pady=16)
+        btn_frame = tk.Frame(frame, bg=BG)
+        btn_frame.pack(fill="x", pady=(16, 0))
 
-        cancel_btn = tk.Button(btn_frame, text="Cancel", command=self.destroy,
-                               bg="#3a3a3a", fg=FG, relief="flat",
-                               activebackground="#4a4a4a", activeforeground=FG,
-                               padx=16, pady=4)
-        cancel_btn.pack(side="left", padx=8)
+        tk.Button(btn_frame, text="Cancel", command=self.destroy,
+                  bg=BTN_BG, fg=FG, relief="flat",
+                  activebackground=BTN_HOVER, activeforeground=FG,
+                  padx=16, pady=4).pack(side="left", padx=(0, 8))
 
-        save_btn = tk.Button(btn_frame, text="Save", command=self._save,
-                             bg=ACCENT, fg="white", relief="flat",
-                             activebackground=ACCENT_HOVER, activeforeground="white",
-                             padx=24, pady=4)
-        save_btn.pack(side="left", padx=8)
-
-        self.grid_columnconfigure(1, weight=1)
+        tk.Button(btn_frame, text="Save", command=self._save,
+                  bg=ACCENT, fg="white", relief="flat",
+                  activebackground=ACCENT_HOVER, activeforeground="white",
+                  padx=24, pady=4).pack(side="left")
 
     def _save(self):
         name = self._entries["name"].get().strip()
@@ -112,10 +134,7 @@ class AddEditDialog(tk.Toplevel):
         username = self._entries["username"].get().strip()
         password = self._entries["password"].get()
         cert_widget = self._entries["certificate"]
-        if isinstance(cert_widget, tk.Text):
-            certificate = cert_widget.get("1.0", "end-1c").strip()
-        else:
-            certificate = cert_widget.get().strip()
+        certificate = cert_widget.get("1.0", "end-1c").strip() if isinstance(cert_widget, tk.Text) else cert_widget.get().strip()
 
         if not name or not hostname or not address or not username:
             messagebox.showwarning("Missing Fields",
@@ -124,12 +143,9 @@ class AddEditDialog(tk.Toplevel):
             return
 
         addresses = [a.strip() for a in address.split(",") if a.strip()]
-
         ep = EndpointConfig(
-            hostname=hostname,
-            addresses=addresses,
-            username=username,
-            password=password,
+            hostname=hostname, addresses=addresses,
+            username=username, password=password,
             certificate=certificate,
             skip_verification=not bool(certificate),
         )
@@ -140,74 +156,68 @@ class AddEditDialog(tk.Toplevel):
             self.result = self._profile
         else:
             self.result = ServerProfile(name=name, endpoint=ep)
-
         self.destroy()
 
 
 class TrustTunnelWindow(tk.Tk):
-    """Main application window."""
+    """Main window."""
 
     def __init__(self):
         super().__init__()
         self.title("TrustTunnel VPN")
-        self.geometry("820x620")
-        self.minsize(600, 400)
         self.configure(bg=BG)
 
         self.client = ClientManager()
         self.servers: list[ServerProfile] = load_servers()
         self._selected_index: Optional[int] = None
 
-        self._build_ui()
+        self._build()
         self._refresh_server_list()
 
-        # Status update timer
-        self._poll_status()
+        # Geometry
+        self.geometry("800x600")
+        self.minsize(500, 400)
 
-        # Window close → disconnect
+        self._poll_status()
         self.protocol("WM_DELETE_WINDOW", self._on_close)
 
-    # ── UI construction ──────────────────────────────────────────
+    # ── UI ────────────────────────────────────────────────────────
 
-    def _build_ui(self):
-        # ── Toolbar ──
-        toolbar = tk.Frame(self, bg="#252525", height=36)
-        toolbar.pack(fill="x")
-        toolbar.pack_propagate(False)
+    def _build(self):
+        # Title bar
+        title_frame = tk.Frame(self, bg="#252525", height=32)
+        title_frame.pack(fill="x")
+        title_frame.pack_propagate(False)
 
-        tk.Label(toolbar, text="🔒 TrustTunnel VPN", bg="#252525", fg=FG,
-                 font=("Helvetica", 12, "bold")).pack(side="left", padx=12, pady=6)
+        tk.Label(title_frame, text="TrustTunnel VPN", bg="#252525", fg=FG,
+                 font=("Helvetica", 11, "bold")).pack(side="left", padx=12, pady=4)
 
-        self._status_dot = tk.Label(toolbar, text="⚫", bg="#252525", fg="#666",
-                                    font=("Helvetica", 10))
-        self._status_dot.pack(side="left", padx=(0, 4))
+        self._status_dot = tk.Label(title_frame, text="  ", bg="#252525",
+                                    fg="#666", font=("Helvetica", 11))
+        self._status_dot.pack(side="left")
 
-        self._status_label = tk.Label(toolbar, text="Disconnected", bg="#252525",
-                                      fg="#888", font=("Helvetica", 10))
-        self._status_label.pack(side="left")
+        self._status_label = tk.Label(title_frame, text="Disconnected",
+                                      bg="#252525", fg="#888",
+                                      font=("Helvetica", 10))
+        self._status_label.pack(side="left", padx=(0, 12))
 
-        # ── Main content (paned for server list + console) ──
-        paned = ttk.PanedWindow(self, orient="vertical")
-        paned.pack(fill="both", expand=True, padx=8, pady=(4, 8))
+        # ── Server table ──
+        table_frame = tk.LabelFrame(self, text="Servers", bg=BG, fg="#888",
+                                    font=("Helvetica", 9, "bold"),
+                                    padx=4, pady=4)
+        table_frame.pack(fill="both", expand=True, padx=8, pady=(4, 0))
 
-        # Top: server list
-        top_frame = tk.Frame(paned, bg=BG)
-        paned.add(top_frame, weight=1)
-
-        # Server table
         columns = ("name", "hostname", "address", "username", "status")
-        self._tree = ttk.Treeview(top_frame, columns=columns, show="headings",
-                                  selectmode="browse", height=8)
+        self._tree = ttk.Treeview(table_frame, columns=columns, show="headings",
+                                  selectmode="browse")
 
         style = ttk.Style()
         style.theme_use("default")
-        style.configure("Treeview",
-                        background="#252525", foreground=FG,
-                        fieldbackground="#252525", rowheight=28,
-                        borderwidth=0)
-        style.configure("Treeview.Heading",
-                        background="#333", foreground=FG,
-                        relief="flat", borderwidth=0, font=("Helvetica", 10, "bold"))
+        style.configure("Treeview", background=INPUT_BG, foreground=FG,
+                        fieldbackground=INPUT_BG, rowheight=26, borderwidth=0)
+        style.configure("Treeview.Heading", background="#333", foreground=FG,
+                        relief="flat", borderwidth=0,
+                        font=("Helvetica", 10, "bold"))
         style.map("Treeview",
                   background=[("selected", ACCENT)],
                   foreground=[("selected", "white")])
@@ -218,102 +228,124 @@ class TrustTunnelWindow(tk.Tk):
         self._tree.heading("username", text="Username", anchor="w")
         self._tree.heading("status", text="Status", anchor="w")
 
-        self._tree.column("name", width=130, minwidth=80)
-        self._tree.column("hostname", width=130, minwidth=80)
-        self._tree.column("address", width=160, minwidth=100)
-        self._tree.column("username", width=100, minwidth=60)
-        self._tree.column("status", width=80, minwidth=60)
+        self._tree.column("name", width=110, minwidth=60)
+        self._tree.column("hostname", width=110, minwidth=60)
+        self._tree.column("address", width=150, minwidth=80)
+        self._tree.column("username", width=90, minwidth=50)
+        self._tree.column("status", width=90, minwidth=60)
 
         self._tree.pack(fill="both", expand=True, side="left")
 
-        scrollbar = ttk.Scrollbar(top_frame, orient="vertical", command=self._tree.yview)
-        scrollbar.pack(side="right", fill="y")
-        self._tree.configure(yscrollcommand=scrollbar.set)
+        vsb = ttk.Scrollbar(table_frame, orient="vertical",
+                           command=self._tree.yview)
+        vsb.pack(side="right", fill="y")
+        self._tree.configure(yscrollcommand=vsb.set)
 
         self._tree.bind("<<TreeviewSelect>>", self._on_server_select)
         self._tree.bind("<Double-1>", lambda e: self._connect_selected())
 
-        # ── Server action buttons ──
-        btn_frame = tk.Frame(self, bg=BG)
-        btn_frame.pack(fill="x", padx=8, pady=(0, 4))
+        # ── Action buttons ──
+        action_frame = tk.Frame(self, bg=BG)
+        action_frame.pack(fill="x", padx=8, pady=4)
 
-        self._make_btn(btn_frame, "+ Add", self._add_server).pack(side="left", padx=2)
-        self._make_btn(btn_frame, "✎ Edit", self._edit_server).pack(side="left", padx=2)
-        self._make_btn(btn_frame, "✕ Delete", self._delete_server).pack(side="left", padx=2)
-        self._make_btn(btn_frame, "📋 Import Link", self._import_deeplink).pack(side="left", padx=2)
+        self._btn_add = tk.Button(action_frame, text="+ Add",
+                                  command=self._add_server,
+                                  bg=BTN_BG, fg=FG, relief="flat",
+                                  activebackground=BTN_HOVER,
+                                  activeforeground=FG,
+                                  font=("Helvetica", 10), padx=10, pady=3)
+        self._btn_add.pack(side="left", padx=1)
 
-        self._connect_btn = self._make_btn(
-            btn_frame, "▶ Connect", self._connect_selected, accent=True)
-        self._connect_btn.pack(side="right", padx=2)
+        self._btn_edit = tk.Button(action_frame, text="Edit",
+                                   command=self._edit_server,
+                                   bg=BTN_BG, fg=FG, relief="flat",
+                                   activebackground=BTN_HOVER,
+                                   activeforeground=FG,
+                                   font=("Helvetica", 10), padx=10, pady=3)
+        self._btn_edit.pack(side="left", padx=1)
 
-        self._disconnect_btn = self._make_btn(
-            btn_frame, "■ Disconnect", self._disconnect, accent=False)
-        # Hidden initially
+        self._btn_del = tk.Button(action_frame, text="Delete",
+                                  command=self._delete_server,
+                                  bg=BTN_BG, fg=FG, relief="flat",
+                                  activebackground=BTN_HOVER,
+                                  activeforeground=FG,
+                                  font=("Helvetica", 10), padx=10, pady=3)
+        self._btn_del.pack(side="left", padx=1)
+
+        self._btn_import = tk.Button(action_frame, text="Import Link",
+                                     command=self._import_deeplink,
+                                     bg=BTN_BG, fg=FG, relief="flat",
+                                     activebackground=BTN_HOVER,
+                                     activeforeground=FG,
+                                     font=("Helvetica", 10), padx=10, pady=3)
+        self._btn_import.pack(side="left", padx=1)
+
+        self._btn_connect = tk.Button(action_frame, text="Connect",
+                                      command=self._connect_selected,
+                                      bg=ACCENT, fg="white", relief="flat",
+                                      activebackground=ACCENT_HOVER,
+                                      activeforeground="white",
+                                      font=("Helvetica", 10, "bold"),
+                                      padx=16, pady=3)
+        self._btn_connect.pack(side="right", padx=2)
+
+        self._btn_disconnect = tk.Button(action_frame, text="Disconnect",
+                                         command=self._disconnect,
+                                         bg=ERROR_RED, fg="white",
+                                         relief="flat",
+                                         activebackground="#d63a3a",
+                                         activeforeground="white",
+                                         font=("Helvetica", 10, "bold"),
+                                         padx=16, pady=3)
 
         # ── Console ──
-        console_label = tk.Label(self, text="Console", bg=BG, fg="#888",
-                                 font=("Helvetica", 9, "bold"), anchor="w")
-        console_label.pack(fill="x", padx=12, pady=(4, 0))
-
-        console_frame = tk.Frame(self, bg=CONSOLE_BG, height=180)
-        console_frame.pack(fill="both", expand=False, padx=8, pady=(2, 4))
-        console_frame.pack_propagate(False)
+        console_frame = tk.LabelFrame(self, text="Console", bg=BG, fg="#888",
+                                      font=("Helvetica", 9, "bold"),
+                                      padx=4, pady=4)
+        console_frame.pack(fill="both", expand=False, padx=8, pady=(4, 8))
+        # Fixed height but can grow
+        console_frame.configure(height=160)
 
         self._console = tk.Text(console_frame, bg=CONSOLE_BG, fg="#a0a0a0",
-                                font=("Menlo", 10), wrap="word", state="disabled",
-                                relief="flat", borderwidth=6, insertbackground=FG)
+                                font=("Menlo", 10), wrap="word",
+                                state="disabled", relief="flat",
+                                borderwidth=4, insertbackground=FG,
+                                height=6)
         self._console.pack(fill="both", expand=True, side="left")
 
-        console_scroll = ttk.Scrollbar(console_frame, orient="vertical",
-                                       command=self._console.yview)
-        console_scroll.pack(side="right", fill="y")
-        self._console.configure(yscrollcommand=console_scroll.set)
+        csb = ttk.Scrollbar(console_frame, orient="vertical",
+                           command=self._console.yview)
+        csb.pack(side="right", fill="y")
+        self._console.configure(yscrollcommand=csb.set)
 
-        # Console toolbar
-        console_toolbar = tk.Frame(self, bg=BG)
-        console_toolbar.pack(fill="x", padx=8)
-        self._make_btn(console_toolbar, "Clear", self._clear_console,
-                       small=True).pack(side="right")
+        # Clear button above console
+        tk.Button(console_frame, text="Clear", command=self._clear_console,
+                  bg=BTN_BG, fg=FG, relief="flat",
+                  activebackground=BTN_HOVER, activeforeground=FG,
+                  font=("Helvetica", 9)).pack(side="bottom", anchor="e",
+                                               padx=4, pady=2)
 
-    def _make_btn(self, parent, text, command, accent=False, small=False):
-        bg_color = ACCENT if accent else "#3a3a3a"
-        fg_color = "white" if accent else FG
-        hover_bg = ACCENT_HOVER if accent else "#4a4a4a"
-        font_size = 9 if small else 10
-        pad = (8, 2) if small else (12, 4)
-
-        btn = tk.Button(parent, text=text, command=command,
-                        bg=bg_color, fg=fg_color, relief="flat",
-                        activebackground=hover_bg, activeforeground=fg_color,
-                        font=("Helvetica", font_size),
-                        padx=pad[0], pady=pad[1])
-        return btn
-
-    # ── Server management ────────────────────────────────────────
+    # ── Server CRUD ───────────────────────────────────────────────
 
     def _refresh_server_list(self):
-        """Reload server list into treeview."""
         for item in self._tree.get_children():
             self._tree.delete(item)
 
         for i, s in enumerate(self.servers):
             addr = ",".join(s.endpoint.addresses) if s.endpoint.addresses else ""
-            is_active = (
-                self.client.is_connected()
-                and self.client.status.server_name == s.name
-            )
-            status = "🟢 connected" if is_active else "⚫ idle"
-            tag = "connected" if is_active else ""
+            active = (self.client.is_connected()
+                      and self.client.status.server_name == s.name)
+            status = "connected" if active else "idle"
+            tag = "connected" if active else ""
 
             self._tree.insert("", "end", iid=str(i), values=(
-                s.name,
-                s.endpoint.hostname,
-                addr,
-                s.endpoint.username,
-                status,
+                s.name, s.endpoint.hostname, addr,
+                s.endpoint.username, status,
             ), tags=(tag,))
 
-        self._tree.tag_configure("connected", background="#1a3a2a", foreground=SUCCESS_GREEN)
+        self._tree.tag_configure("connected",
+                                 background="#1a3a2a",
+                                 foreground=SUCCESS_GREEN)
 
     def _save_and_refresh(self):
         save_servers(self.servers)
@@ -328,7 +360,6 @@ class TrustTunnelWindow(tk.Tk):
         if dlg.result:
             self.servers.append(dlg.result)
             self._save_and_refresh()
-            # Select the new server
             idx = len(self.servers) - 1
             self._tree.selection_set(str(idx))
             self._tree.focus(str(idx))
@@ -348,30 +379,30 @@ class TrustTunnelWindow(tk.Tk):
             messagebox.showinfo("Select Server", "Select a server to delete first.")
             return
         profile = self.servers[self._selected_index]
-        if messagebox.askyesno("Delete Server",
-                               f"Delete server '{profile.name}'?",
-                               parent=self):
+        if messagebox.askyesno("Delete", f"Delete '{profile.name}'?", parent=self):
             self.servers.pop(self._selected_index)
             self._selected_index = None
             self._save_and_refresh()
 
     def _import_deeplink(self):
-        """Prompt for tt://? deep-link and import."""
         dlg = tk.Toplevel(self)
         dlg.title("Import Deep-Link")
-        dlg.geometry("580x140")
         dlg.configure(bg=BG)
         dlg.transient(self)
         dlg.grab_set()
+        dlg.resizable(False, False)
 
-        tk.Label(dlg, text="Paste a tt://? deep-link:", bg=BG, fg=FG).pack(padx=12, pady=(12, 4), anchor="w")
+        frame = tk.Frame(dlg, bg=BG, padx=16, pady=12)
+        frame.pack(fill="both", expand=True)
 
-        entry = tk.Text(dlg, height=2, width=60, bg="#2d2d2d", fg=FG,
+        tk.Label(frame, text="Paste tt://? deep-link:", bg=BG, fg=FG,
+                 anchor="w").pack(fill="x")
+
+        entry = tk.Text(frame, height=2, width=55, bg=INPUT_BG, fg=FG,
                         insertbackground=FG, relief="flat", borderwidth=4,
                         font=("Menlo", 9))
-        entry.pack(fill="x", padx=12, pady=4)
+        entry.pack(fill="x", pady=6)
 
-        # Try clipboard
         try:
             clipboard = self.clipboard_get()
             entry.insert("1.0", clipboard)
@@ -387,47 +418,72 @@ class TrustTunnelWindow(tk.Tk):
             if profile:
                 self.servers.append(profile)
                 self._save_and_refresh()
-                dlg.destroy()
                 self._log(f"Imported: {profile.name}")
+                dlg.destroy()
             else:
                 messagebox.showwarning("Parse Error",
-                                       "Could not parse deep-link. Check format.",
-                                       parent=dlg)
+                                       "Could not parse deep-link.", parent=dlg)
 
-        btn_frame = tk.Frame(dlg, bg=BG)
-        btn_frame.pack(pady=8)
+        btn_frame = tk.Frame(frame, bg=BG)
+        btn_frame.pack(fill="x", pady=(8, 0))
         tk.Button(btn_frame, text="Cancel", command=dlg.destroy,
-                  bg="#3a3a3a", fg=FG, relief="flat", padx=12).pack(side="left", padx=4)
+                  bg=BTN_BG, fg=FG, relief="flat",
+                  activebackground=BTN_HOVER, activeforeground=FG,
+                  padx=12).pack(side="left", padx=(0, 8))
         tk.Button(btn_frame, text="Import", command=do_import,
-                  bg=ACCENT, fg="white", relief="flat", padx=16).pack(side="left", padx=4)
+                  bg=ACCENT, fg="white", relief="flat",
+                  activebackground=ACCENT_HOVER, activeforeground="white",
+                  padx=16).pack(side="left")
 
-    # ── Connection controls ──────────────────────────────────────
+        dlg.update_idletasks()
+        w, h = dlg.winfo_reqwidth() + 20, dlg.winfo_reqheight() + 10
+        dlg.geometry(f"{max(w, 480)}x{max(h, 150)}")
+        px = self.winfo_rootx(); py = self.winfo_rooty()
+        pw = self.winfo_width(); ph = self.winfo_height()
+        dlg.geometry(f"+{px + (pw - w) // 2}+{py + (ph - h) // 2}")
+
+    # ── Connection ─────────────────────────────────────────────────
 
     def _connect_selected(self):
         if self._selected_index is None:
-            messagebox.showinfo("Select Server", "Select a server to connect to first.")
+            messagebox.showinfo("Select Server", "Select a server first.")
             return
         profile = self.servers[self._selected_index]
         self._log(f"Connecting to {profile.name}...")
-        self._update_status("connecting", f"Connecting to {profile.name}...")
+        self._update_buttons("connecting")
 
-        # Run connect in background to not block UI
         def do_connect():
             success = self.client.connect(profile)
-            if not success:
-                self.after(0, lambda: self._log(f"ERROR: {self.client.status.error}"))
+            self.after(0, lambda: self._log(
+                f"ERROR: {self.client.status.error}" if not success
+                else f"Connected to {profile.name}"
+            ))
             self.after(0, self._refresh_server_list)
+            self.after(0, self._update_buttons)
 
-        t = threading.Thread(target=do_connect, daemon=True)
-        t.start()
+        threading.Thread(target=do_connect, daemon=True).start()
 
     def _disconnect(self):
         self._log("Disconnecting...")
         self.client.disconnect()
-        self._update_status("disconnected", "Disconnected")
         self._refresh_server_list()
+        self._update_buttons()
 
-    # ── Console ───────────────────────────────────────────────────
+    def _update_buttons(self, state=None):
+        """Show/hide connect/disconnect based on actual client state."""
+        if state is None:
+            connected = self.client.is_connected()
+        else:
+            connected = (state == "connecting")
+
+        if connected:
+            self._btn_connect.pack_forget()
+            self._btn_disconnect.pack(side="right", padx=2)
+        else:
+            self._btn_disconnect.pack_forget()
+            self._btn_connect.pack(side="right", padx=2)
+
+    # ── Console ────────────────────────────────────────────────────
 
     def _log(self, text: str):
         self._console.configure(state="normal")
@@ -440,64 +496,60 @@ class TrustTunnelWindow(tk.Tk):
         self._console.delete("1.0", "end")
         self._console.configure(state="disabled")
 
-    # ── Status polling ───────────────────────────────────────────
+    # ── Polling ────────────────────────────────────────────────────
 
     def _poll_status(self):
-        """Periodically update status and console from client."""
         try:
             status = self.client.status
+            state = status.state
 
-            # Update status indicator
-            state_map = {
-                ClientState.DISCONNECTED: ("⚫", "Disconnected", "#666"),
-                ClientState.CHECKING: ("🟡", "Checking...", WARNING_YELLOW),
-                ClientState.CONNECTING: ("🟡", f"Connecting... [{status.phase.value}]",
-                                         WARNING_YELLOW),
-                ClientState.CONNECTED: ("🟢", f"Connected — {status.server_name}",
-                                        SUCCESS_GREEN),
-                ClientState.ERROR: ("🔴", "Error", ERROR_RED),
-            }
-            dot, label, color = state_map.get(status.state,
-                                              ("⚫", status.state.value, "#666"))
+            dot_map = {ClientState.DISCONNECTED: ("  ", "#666"),
+                       ClientState.CHECKING: ("*", WARNING_YELLOW),
+                       ClientState.CONNECTING: ("*", WARNING_YELLOW),
+                       ClientState.CONNECTED: ("*", SUCCESS_GREEN),
+                       ClientState.ERROR: ("!", ERROR_RED)}
+            dot, color = dot_map.get(state, ("  ", "#666"))
+
+            label_map = {ClientState.DISCONNECTED: "Disconnected",
+                         ClientState.CHECKING: "Checking...",
+                         ClientState.CONNECTING: f"Connecting [{status.phase.value}]",
+                         ClientState.CONNECTED: f"Connected - {status.server_name}",
+                         ClientState.ERROR: "Error"}
+            label = label_map.get(state, state.value)
 
             self._status_dot.configure(text=dot, fg=color)
             self._status_label.configure(text=label, fg=color)
 
-            # Show/hide connect/disconnect buttons
-            if status.state == ClientState.CONNECTED:
-                self._connect_btn.pack_forget()
-                self._disconnect_btn.pack(side="right", padx=2)
-            else:
-                self._disconnect_btn.pack_forget()
-                self._connect_btn.pack(side="right", padx=2)
-
-            # Append new log lines to console
+            # Append new log lines
             lines = status.log_lines
-            if hasattr(self, "_last_log_count"):
-                new_lines = lines[self._last_log_count:]
-                for line in new_lines:
-                    self._log(line)
-            self._last_log_count = len(lines)
+            if not hasattr(self, "_log_idx"):
+                self._log_idx = 0
+            new_lines = lines[self._log_idx:]
+            for line in new_lines:
+                self._log(line)
+            self._log_idx = len(lines)
 
-            # Refresh server list periodically
-            if status.state in (ClientState.CONNECTED, ClientState.CONNECTING,
-                                ClientState.CHECKING):
-                self._refresh_server_list()
+            # Buttons
+            if state == ClientState.CONNECTED:
+                self._btn_connect.pack_forget()
+                self._btn_disconnect.pack(side="right", padx=2)
+            elif state == ClientState.CONNECTING:
+                self._btn_connect.pack_forget()
+                self._btn_disconnect.pack(side="right", padx=2)
+            else:
+                self._btn_disconnect.pack_forget()
+                self._btn_connect.pack(side="right", padx=2)
 
         except Exception:
             pass
 
         self.after(300, self._poll_status)
 
-    def _update_status(self, state: str, text: str):
-        pass  # handled by _poll_status
-
-    # ── Lifecycle ─────────────────────────────────────────────────
+    # ── Lifecycle ──────────────────────────────────────────────────
 
     def _on_close(self):
         if self.client.is_connected():
-            if messagebox.askyesno("Disconnect",
-                                   "VPN is connected. Disconnect and quit?",
+            if messagebox.askyesno("Quit", "VPN is connected. Disconnect and quit?",
                                    parent=self):
                 self.client.disconnect()
             else:
