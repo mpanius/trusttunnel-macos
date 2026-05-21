@@ -65,7 +65,12 @@ class AddEditDialog(tk.Toplevel):
 
         self._build()
         self.resizable(False, False)
-        self.wait_window()
+        self.minsize(440, 360)
+
+        # Force draw
+        self.deiconify()
+        self.lift()
+        self.update()
 
     def _build(self):
         # Main form area — lighter background so inputs stand out
@@ -310,6 +315,7 @@ class TrustTunnelWindow(tk.Tk):
 
     def _add_server(self):
         dlg = AddEditDialog(self)
+        self.wait_window(dlg)
         if dlg.result:
             self.servers.append(dlg.result)
             self._save_and_refresh()
@@ -322,6 +328,7 @@ class TrustTunnelWindow(tk.Tk):
             messagebox.showinfo("Note", "Select a server to edit first.")
             return
         dlg = AddEditDialog(self, profile=self.servers[self._selected_index])
+        self.wait_window(dlg)
         if dlg.result:
             self.servers[self._selected_index] = dlg.result
             self._save_and_refresh()
