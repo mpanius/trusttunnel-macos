@@ -33,6 +33,22 @@ echo ""
 echo "=== Installing build dependencies ==="
 "$PYTHON" -m pip install --quiet pyinstaller toml
 
+# 2.5. Download TrustTunnel client binary (bundled in .app)
+echo ""
+if [ ! -f "bin/trusttunnel_client" ]; then
+    echo "=== Downloading TrustTunnel CLI client ==="
+    mkdir -p bin
+    TT_VERSION="v1.0.49"
+    TT_URL="https://github.com/TrustTunnel/TrustTunnelClient/releases/download/${TT_VERSION}/trusttunnel_client-${TT_VERSION}-macos-universal.tar.gz"
+    curl -fsSL "$TT_URL" | tar xz --strip-components=1 -C bin/ trusttunnel_client-${TT_VERSION}-macos-universal/trusttunnel_client
+    chmod +x bin/trusttunnel_client
+    rm -f bin/LICENSE bin/*.sig  # only need the binary
+    echo "  bin/trusttunnel_client ($(du -sh bin/trusttunnel_client | cut -f1))"
+else
+    echo "=== TrustTunnel CLI client already bundled ==="
+    echo "  bin/trusttunnel_client ($(du -sh bin/trusttunnel_client | cut -f1))"
+fi
+
 # 3. Generate icon (if no icon.icns exists)
 if [ ! -f "icon.icns" ]; then
     echo ""

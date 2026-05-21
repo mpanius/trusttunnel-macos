@@ -6,6 +6,7 @@ Now with pre-flight checks, phased connection progress, and rich diagnostics.
 import os
 import signal
 import subprocess
+import sys
 import tempfile
 import time
 from dataclasses import dataclass, field
@@ -18,11 +19,33 @@ if TYPE_CHECKING:
     from .config import ServerProfile
 
 
-CLIENT_BINARY_PATHS = [
-    "/opt/trusttunnel_client/trusttunnel_client",
-    "/usr/local/bin/trusttunnel_client",
-    "trusttunnel_client",
-]
+def _find_project_root() -> str:
+    """Find the project root directory, works in dev mode and PyInstaller bundle."""
+    # PyInstaller: bin/ directory is in Resources/
+    if getattr(sys, 'frozen', False):
+        # sys._MEIPASS is the temporary dir where PyInstaller extracts data
+        base = getattr(sys, '_MEIPASS', os.path.dirname(sys.executable))
+        # Resources/bin/trusttunnel_client
+        return os.path.join(base)
+    # Dev mode: src/client.py -> trusttunnel-macos/
+    return os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+
+def _get_binary_paths() -> list:
+    """Return ordered list of paths to search for trusttunnel_client."""
+    root = _find_project_root()
+    paths = []
+    # 1. Bundled in .app or dev project bin/
+    paths.append(os.path.join(root, "bin", "trusttunnel_client"))
+    # 2. System install
+    paths.append("/opt/trusttunnel_client/trusttunnel_client")
+    paths.append("/usr/local/bin/trusttunnel_client")
+    # 3. Plain name (PATH lookup)
+    paths.append("trusttunnel_client")
+    return paths
+
+
+CLIENT_BINARY_PATHS = _get_binary_paths()
 
 
 class ClientState(Enum):

@@ -28,7 +28,9 @@ block_cipher = None
 a = Analysis(
     ["run.py"],
     pathex=[],
-    binaries=[],
+    binaries=[
+        ("bin/trusttunnel_client", "bin"),
+    ],
     datas=[
         ("src", "src"),              # all source code
     ],

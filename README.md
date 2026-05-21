@@ -18,12 +18,12 @@ Dark-themed, with server management, split tunneling, and embedded console.
 ## Requirements
 
 - macOS 11 (Big Sur) or later
-- [TrustTunnel CLI Client](https://github.com/TrustTunnel/TrustTunnelClient) installed separately
+- No other dependencies — TrustTunnel CLI client is bundled in the .app
 
 ## Install (pre-built .app)
 
 Download the latest `TrustTunnel.app` from [Releases](https://github.com/inhale/trusttunnel-macos/releases),
-drag to `/Applications`, double-click. No terminal, no Python needed.
+drag to `/Applications`, double-click. No terminal, no Python, no CLI client needed.
 
 ## Build from source
 
