@@ -85,8 +85,22 @@ if [ -z "$PYTHON" ]; then
         done
 
         if [ -n "$PYTHON_CANDIDATE" ]; then
-            echo "  ✓ Python 3.11 found: $PYTHON_CANDIDATE"
-            PYTHON="$PYTHON_CANDIDATE"
+            # Verify tkinter WORKS (brew python@3.11 may lack tcl-tk linkage)
+            if "$PYTHON_CANDIDATE" -c "import tkinter" 2>/dev/null; then
+                echo "  ✓ Python 3.11 found with Tk: $PYTHON_CANDIDATE"
+                PYTHON="$PYTHON_CANDIDATE"
+            else
+                echo ""
+                echo "  ✗ Python 3.11 found but WITHOUT _tkinter (no tcl-tk support)."
+                echo "  Fix this on your Mac:"
+                echo ""
+                echo "    brew reinstall python@3.11"
+                echo ""
+                echo "  (If that still fails: brew install tcl-tk && brew reinstall python@3.11)"
+                echo ""
+                echo "  After fixing, re-run: ./build-app.sh"
+                exit 1
+            fi
         else
             echo ""
             echo "  ✗ python@3.11 not found after brew install."
@@ -117,19 +131,23 @@ _install_deps() {
     if "$PYTHON" -m pip install --quiet pyinstaller 2>/dev/null; then
         return 0
     fi
-    echo "  → pip not found, bootstrapping via ensurepip..."
-    "$PYTHON" -m ensurepip --upgrade 2>&1 || true
+    # Homebrew Python 3.11's ensurepip creates a broken pip3 that can't import
+    # its own module. Use get-pip.py (official bootstrap) instead.
+    echo "  → pip not found, installing via get-pip.py..."
+    curl -fsSL https://bootstrap.pypa.io/get-pip.py -o /tmp/get-pip.py
+    "$PYTHON" /tmp/get-pip.py --quiet 2>&1 || true
+    rm -f /tmp/get-pip.py
     if "$PYTHON" -m pip install --quiet pyinstaller 2>/dev/null; then
         return 0
     fi
+    # Last resort: find any working pip3 in the Homebrew tree
     PIP3=$(find "$BREW_PREFIX" /usr/local/opt /opt/homebrew/opt \
-                        -name pip3 -maxdepth 8 \( -type f -o -type l \) 2>/dev/null | head -1)
-                # Also check the common Framework path
-                if [ -z "$PIP3" ]; then
-                    PIP3="$BREW_PREFIX/Frameworks/Python.framework/Versions/3.11/bin/pip3"
-                    [ -x "$PIP3" ] || PIP3=""
-                fi
-    if [ -n "$PIP3" ]; then
+                    -name pip3 -maxdepth 8 \( -type f -o -type l \) 2>/dev/null | head -1)
+    if [ -z "$PIP3" ]; then
+        PIP3="$BREW_PREFIX/Frameworks/Python.framework/Versions/3.11/bin/pip3"
+        [ -x "$PIP3" ] || PIP3=""
+    fi
+    if [ -n "$PIP3" ] && "$PIP3" --version >/dev/null 2>&1; then
         "$PIP3" install --quiet pyinstaller 2>&1
         return $?
     fi
