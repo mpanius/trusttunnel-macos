@@ -90,7 +90,12 @@ if [ -z "$PYTHON" ]; then
         if [ -n "$PYTHON_CANDIDATE" ]; then
             echo "  ✓ Python 3.11 found: $PYTHON_CANDIDATE"
             echo "  → Installing toml..."
-            # Homebrew Python may not ship pip — use ensurepip as fallback
+
+            # Homebrew Python may not ship pip. Derive brew prefix
+            # from python path and add its bin/ to PATH.
+            BREW_PREFIX="$(dirname "$(dirname "$PYTHON_CANDIDATE")")"
+            export PATH="$BREW_PREFIX/bin:$PATH"
+
             if ! "$PYTHON_CANDIDATE" -m pip install --quiet toml 2>&1; then
                 echo "  → pip not found, bootstrapping via ensurepip..."
                 "$PYTHON_CANDIDATE" -m ensurepip --upgrade 2>&1 || true
@@ -120,6 +125,11 @@ echo "Python: $PYTHON (Tk $("$PYTHON" -c "import tkinter; print(tkinter.TkVersio
 # 2. Install build deps
 echo ""
 echo "=== Installing build dependencies ==="
+
+# Homebrew Python's bin/ may not be on PATH — add it
+BREW_PREFIX="$(dirname "$(dirname "$PYTHON")")"
+export PATH="$BREW_PREFIX/bin:$PATH"
+
 if ! "$PYTHON" -m pip install --quiet pyinstaller toml 2>&1; then
     echo "  → pip not found, bootstrapping via ensurepip..."
     "$PYTHON" -m ensurepip --upgrade 2>&1 || true
