@@ -32,13 +32,12 @@ a = Analysis(
         ("bin/trusttunnel_client", "bin"),
     ],
     datas=[
-        ("src", "src"),              # all source code
+        ("src", "src"),              # all source code (including _vendor/toml)
     ],
     hiddenimports=[
         "tkinter",
         "tkinter.ttk",
         "tkinter.messagebox",
-        "toml",
         "base64",
         "threading",
         "json",

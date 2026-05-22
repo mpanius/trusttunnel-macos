@@ -53,10 +53,7 @@ if [ -z "$PYTHON" ]; then
     echo "║  # 2. Install Python 3.11 with Tk 8.6                       ║"
     echo "║  brew install python@3.11                                   ║"
     echo "║                                                            ║"
-    echo "║  # 3. Install toml dependency                                ║"
-    echo "║  /usr/local/bin/python3.11 -m pip install toml              ║"
-    echo "║                                                            ║"
-    echo "║  # 4. Re-run build                                          ║"
+    echo "║  # 3. Re-run build                                         ║"
     echo "║  ./build-app.sh                                             ║"
     echo "╚══════════════════════════════════════════════════════════════╝"
     echo ""
@@ -89,44 +86,7 @@ if [ -z "$PYTHON" ]; then
 
         if [ -n "$PYTHON_CANDIDATE" ]; then
             echo "  ✓ Python 3.11 found: $PYTHON_CANDIDATE"
-            echo "  → Installing toml..."
-
-            # Homebrew Python may not ship pip. Derive brew prefix
-            BREW_PREFIX="$(brew --prefix python@3.11 2>/dev/null || dirname "$(dirname "$(dirname "$PYTHON_CANDIDATE")")")"
-            export PATH="$BREW_PREFIX/bin:$BREW_PREFIX/libexec/bin:$PATH"
-
-            _install_toml() {
-                if "$PYTHON_CANDIDATE" -m pip install --quiet toml 2>/dev/null; then
-                    return 0
-                fi
-                # ensurepip fallback
-                echo "  → pip not found, bootstrapping via ensurepip..."
-                "$PYTHON_CANDIDATE" -m ensurepip --upgrade 2>&1 || true
-                # Try pip module first, then locate pip3 binary
-                if "$PYTHON_CANDIDATE" -m pip install --quiet toml 2>/dev/null; then
-                    return 0
-                fi
-                PIP3=$(find "$BREW_PREFIX" /usr/local/opt /opt/homebrew/opt \
-                        -name pip3 -maxdepth 8 \( -type f -o -type l \) 2>/dev/null | head -1)
-                # Also check the common Framework path
-                if [ -z "$PIP3" ]; then
-                    PIP3="$BREW_PREFIX/Frameworks/Python.framework/Versions/3.11/bin/pip3"
-                    [ -x "$PIP3" ] || PIP3=""
-                fi
-                if [ -n "$PIP3" ]; then
-                    "$PIP3" install --quiet toml 2>&1
-                    return $?
-                fi
-                return 1
-            }
-            _install_toml || {
-                echo "  ✗ Failed to install toml. Run manually:"
-                echo "    $PYTHON_CANDIDATE -m ensurepip --upgrade"
-                echo "    $PYTHON_CANDIDATE -m pip install toml"
-                exit 1
-            }
             PYTHON="$PYTHON_CANDIDATE"
-            echo "  ✓ Done! Continuing with $PYTHON"
         else
             echo ""
             echo "  ✗ python@3.11 not found after brew install."
@@ -134,7 +94,6 @@ if [ -z "$PYTHON" ]; then
             echo ""
             echo "    git -C \"\$(brew --repo homebrew/core)\" fetch --unshallow"
             echo "    brew install python@3.11"
-            echo "    /usr/local/bin/python3.11 -m pip install toml"
             echo "    ./build-app.sh"
             exit 1
         fi
@@ -155,12 +114,12 @@ BREW_PREFIX="$(brew --prefix python@3.11 2>/dev/null || dirname "$(dirname "$(di
 export PATH="$BREW_PREFIX/bin:$BREW_PREFIX/libexec/bin:$PATH"
 
 _install_deps() {
-    if "$PYTHON" -m pip install --quiet pyinstaller toml 2>/dev/null; then
+    if "$PYTHON" -m pip install --quiet pyinstaller 2>/dev/null; then
         return 0
     fi
     echo "  → pip not found, bootstrapping via ensurepip..."
     "$PYTHON" -m ensurepip --upgrade 2>&1 || true
-    if "$PYTHON" -m pip install --quiet pyinstaller toml 2>/dev/null; then
+    if "$PYTHON" -m pip install --quiet pyinstaller 2>/dev/null; then
         return 0
     fi
     PIP3=$(find "$BREW_PREFIX" /usr/local/opt /opt/homebrew/opt \
@@ -171,7 +130,7 @@ _install_deps() {
                     [ -x "$PIP3" ] || PIP3=""
                 fi
     if [ -n "$PIP3" ]; then
-        "$PIP3" install --quiet pyinstaller toml 2>&1
+        "$PIP3" install --quiet pyinstaller 2>&1
         return $?
     fi
     return 1

@@ -2,7 +2,7 @@
 
 import os
 import re
-import toml
+from src._vendor import toml
 import base64
 from dataclasses import dataclass, field, asdict
 from typing import Optional

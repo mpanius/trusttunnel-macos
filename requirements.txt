@@ -1,2 +1,8 @@
-rumps>=0.4.0
-toml>=0.10.0
+# TrustTunnel macOS GUI — dependencies
+# 
+# All runtime deps are now vendored or stdlib:
+#   - toml → src/_vendor/toml/ (MIT, pure Python, no deps)
+#   - tkinter → bundled with Python
+#   - Everything else → stdlib
+#
+# Only build-time dep: pyinstaller (handled by build-app.sh)

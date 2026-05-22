@@ -265,8 +265,7 @@ class TrustTunnelWindow(tk.Tk):
         if not ok:
             self._log("⚠ Tk version too old — widgets may be broken.")
             self._log("   Install Homebrew Python: brew install python@3.11")
-            self._log("   Then: /usr/local/bin/python3.11 -m pip install toml")
-            self._log("   Run: /usr/local/bin/python3.11 -m src")
+            self._log("   Then: /usr/local/bin/python3.11 -m src")
 
         self._poll_status()
         self.protocol("WM_DELETE_WINDOW", self._on_close)
