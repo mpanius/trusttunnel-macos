@@ -106,7 +106,13 @@ if [ -z "$PYTHON" ]; then
                 if "$PYTHON_CANDIDATE" -m pip install --quiet toml 2>/dev/null; then
                     return 0
                 fi
-                PIP3=$(find "$BREW_PREFIX" /usr/local/opt /opt/homebrew/opt -name pip3 -maxdepth 6 \( -type f -o -type l \) 2>/dev/null | head -1)
+                PIP3=$(find "$BREW_PREFIX" /usr/local/opt /opt/homebrew/opt \
+                        -name pip3 -maxdepth 8 \( -type f -o -type l \) 2>/dev/null | head -1)
+                # Also check the common Framework path
+                if [ -z "$PIP3" ]; then
+                    PIP3="$BREW_PREFIX/Frameworks/Python.framework/Versions/3.11/bin/pip3"
+                    [ -x "$PIP3" ] || PIP3=""
+                fi
                 if [ -n "$PIP3" ]; then
                     "$PIP3" install --quiet toml 2>&1
                     return $?
@@ -157,7 +163,13 @@ _install_deps() {
     if "$PYTHON" -m pip install --quiet pyinstaller toml 2>/dev/null; then
         return 0
     fi
-    PIP3=$(find "$BREW_PREFIX" /usr/local/opt /opt/homebrew/opt -name pip3 -maxdepth 6 \( -type f -o -type l \) 2>/dev/null | head -1)
+    PIP3=$(find "$BREW_PREFIX" /usr/local/opt /opt/homebrew/opt \
+                        -name pip3 -maxdepth 8 \( -type f -o -type l \) 2>/dev/null | head -1)
+                # Also check the common Framework path
+                if [ -z "$PIP3" ]; then
+                    PIP3="$BREW_PREFIX/Frameworks/Python.framework/Versions/3.11/bin/pip3"
+                    [ -x "$PIP3" ] || PIP3=""
+                fi
     if [ -n "$PIP3" ]; then
         "$PIP3" install --quiet pyinstaller toml 2>&1
         return $?
