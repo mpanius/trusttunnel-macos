@@ -64,10 +64,15 @@ if [ -z "$PYTHON" ]; then
     read -p "  [y/N]: " run_ans
     if [ "${run_ans}" = "y" ] || [ "${run_ans}" = "Y" ]; then
         echo ""
-        echo "  → Fixing Homebrew shallow clone..."
-        git -C "$(brew --repo homebrew/core)" fetch --unshallow 2>/dev/null || \
-            echo "  (shallow clone fix skipped — continuing)"
+        echo "  → Fixing Homebrew (this may take 1-2 min)..."
 
+        # Step 1: unshallow. If it fails, try update-reset as fallback.
+        if ! git -C "$(brew --repo homebrew/core)" fetch --unshallow 2>&1; then
+            echo "  → unshallow failed, trying brew update-reset..."
+            brew update-reset 2>&1 || true
+        fi
+
+        # Step 2: install
         echo "  → Installing python@3.11..."
         if brew install python@3.11 2>&1; then
             echo ""
@@ -82,7 +87,14 @@ if [ -z "$PYTHON" ]; then
                 echo "  ✓ Done! Continuing with $PYTHON"
             fi
         else
-            echo "  ✗ brew install failed. Run the manual steps above."
+            echo ""
+            echo "  ✗ Auto-install failed — likely GitHub API rate limit."
+            echo "  Run these commands in Terminal manually:"
+            echo ""
+            echo "    git -C \"\$(brew --repo homebrew/core)\" fetch --unshallow"
+            echo "    brew install python@3.11"
+            echo "    /usr/local/bin/python3.11 -m pip install toml"
+            echo "    ./build-app.sh"
             exit 1
         fi
     else
