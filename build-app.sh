@@ -106,7 +106,7 @@ if [ -z "$PYTHON" ]; then
                 if "$PYTHON_CANDIDATE" -m pip install --quiet toml 2>/dev/null; then
                     return 0
                 fi
-                PIP3=$(find "$BREW_PREFIX" -name pip3 -type f 2>/dev/null | head -1)
+                PIP3=$(find "$BREW_PREFIX" /usr/local/opt /opt/homebrew/opt -name pip3 -maxdepth 6 \( -type f -o -type l \) 2>/dev/null | head -1)
                 if [ -n "$PIP3" ]; then
                     "$PIP3" install --quiet toml 2>&1
                     return $?
@@ -157,7 +157,7 @@ _install_deps() {
     if "$PYTHON" -m pip install --quiet pyinstaller toml 2>/dev/null; then
         return 0
     fi
-    PIP3=$(find "$BREW_PREFIX" -name pip3 -type f 2>/dev/null | head -1)
+    PIP3=$(find "$BREW_PREFIX" /usr/local/opt /opt/homebrew/opt -name pip3 -maxdepth 6 \( -type f -o -type l \) 2>/dev/null | head -1)
     if [ -n "$PIP3" ]; then
         "$PIP3" install --quiet pyinstaller toml 2>&1
         return $?
