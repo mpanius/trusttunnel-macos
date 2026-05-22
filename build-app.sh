@@ -77,23 +77,25 @@ if [ -z "$PYTHON" ]; then
             echo "  → No shallow clone to fix (fresh Homebrew or Apple Silicon)."
         fi
 
-        # Step 2: install
+        # Step 2: install (brew warnings may cause non-zero exit — check binary, not exit code)
         echo "  → Installing python@3.11..."
-        if brew install python@3.11 2>&1; then
-            echo ""
-            echo "  ✓ Python 3.11 installed. Installing toml..."
-            PYTHON_CANDIDATE=""
-            for p in /usr/local/bin/python3.11 /opt/homebrew/bin/python3.11; do
-                [ -x "$p" ] && PYTHON_CANDIDATE="$p" && break
-            done
-            if [ -n "$PYTHON_CANDIDATE" ]; then
-                "$PYTHON_CANDIDATE" -m pip install --quiet toml
-                PYTHON="$PYTHON_CANDIDATE"
-                echo "  ✓ Done! Continuing with $PYTHON"
-            fi
+        brew install python@3.11 2>&1 || true
+
+        # Verify: is python3.11 now available?
+        PYTHON_CANDIDATE=""
+        for p in /usr/local/bin/python3.11 /opt/homebrew/bin/python3.11; do
+            [ -x "$p" ] && PYTHON_CANDIDATE="$p" && break
+        done
+
+        if [ -n "$PYTHON_CANDIDATE" ]; then
+            echo "  ✓ Python 3.11 found: $PYTHON_CANDIDATE"
+            echo "  → Installing toml..."
+            "$PYTHON_CANDIDATE" -m pip install --quiet toml
+            PYTHON="$PYTHON_CANDIDATE"
+            echo "  ✓ Done! Continuing with $PYTHON"
         else
             echo ""
-            echo "  ✗ Auto-install failed — likely GitHub API rate limit."
+            echo "  ✗ python@3.11 not found after brew install."
             echo "  Run these commands in Terminal manually:"
             echo ""
             echo "    git -C \"\$(brew --repo homebrew/core)\" fetch --unshallow"
