@@ -66,10 +66,15 @@ if [ -z "$PYTHON" ]; then
         echo ""
         echo "  → Fixing Homebrew (this may take 1-2 min)..."
 
-        # Step 1: unshallow. If it fails, try update-reset as fallback.
-        if ! git -C "$(brew --repo homebrew/core)" fetch --unshallow 2>&1; then
-            echo "  → unshallow failed, trying brew update-reset..."
-            brew update-reset 2>&1 || true
+        # Step 1: unshallow — only if the tap exists (not all Macs have it)
+        CORE_TAP="$(brew --repo homebrew/core 2>/dev/null || echo "")"
+        if [ -n "$CORE_TAP" ] && [ -d "$CORE_TAP" ]; then
+            if ! git -C "$CORE_TAP" fetch --unshallow 2>&1; then
+                echo "  → unshallow failed, trying brew update-reset..."
+                brew update-reset 2>&1 || true
+            fi
+        else
+            echo "  → No shallow clone to fix (fresh Homebrew or Apple Silicon)."
         fi
 
         # Step 2: install
