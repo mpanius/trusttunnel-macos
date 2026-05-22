@@ -90,7 +90,12 @@ if [ -z "$PYTHON" ]; then
         if [ -n "$PYTHON_CANDIDATE" ]; then
             echo "  ✓ Python 3.11 found: $PYTHON_CANDIDATE"
             echo "  → Installing toml..."
-            "$PYTHON_CANDIDATE" -m pip install --quiet toml
+            # Homebrew Python may not ship pip — use ensurepip as fallback
+            if ! "$PYTHON_CANDIDATE" -m pip install --quiet toml 2>&1; then
+                echo "  → pip not found, bootstrapping via ensurepip..."
+                "$PYTHON_CANDIDATE" -m ensurepip --upgrade 2>&1 || true
+                "$PYTHON_CANDIDATE" -m pip install --quiet toml 2>&1
+            fi
             PYTHON="$PYTHON_CANDIDATE"
             echo "  ✓ Done! Continuing with $PYTHON"
         else
@@ -115,7 +120,11 @@ echo "Python: $PYTHON (Tk $("$PYTHON" -c "import tkinter; print(tkinter.TkVersio
 # 2. Install build deps
 echo ""
 echo "=== Installing build dependencies ==="
-"$PYTHON" -m pip install --quiet pyinstaller toml
+if ! "$PYTHON" -m pip install --quiet pyinstaller toml 2>&1; then
+    echo "  → pip not found, bootstrapping via ensurepip..."
+    "$PYTHON" -m ensurepip --upgrade 2>&1 || true
+    "$PYTHON" -m pip install --quiet pyinstaller toml 2>&1
+fi
 
 # 2.5. Download TrustTunnel client binary (bundled in .app)
 echo ""
