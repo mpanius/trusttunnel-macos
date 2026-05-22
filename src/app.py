@@ -33,19 +33,10 @@ if _TK_VERSION < 8.6:
 
 
 def _check_tk_version(parent):
-    """Warn and ask if user wants to continue with old Tk.
-    
-    Must be called AFTER a Tk root is created (parent = the root window).
-    Does NOT create/destroy its own Tk() — that would break subsequent Tk() calls.
-    """
+    """Return (ok: bool, message: str). Does NOT show dialogs — caller decides."""
     if _TK_VERSION >= 8.6:
-        return True  # all good
-    try:
-        ok = messagebox.askyesno(
-            "Tk Version Warning", _WARNING, icon="warning", parent=parent)
-        return ok
-    except Exception:
-        return False  # can't even show dialog — bail
+        return True, ""
+    return False, _WARNING
 
 
 # ── Entry widget factory (handles Tk 8.5 vs 8.6) ──────────────────
@@ -258,13 +249,6 @@ class TrustTunnelWindow(tk.Tk):
         self.title("TrustTunnel VPN")
         self.configure(bg=BG)
 
-        # Tk version check — must be after super().__init__() so
-        # 'self' is a valid Tk root for the messagebox parent.
-        if not _check_tk_version(self):
-            print("Tk version too old — exiting.", file=sys.stderr)
-            self.destroy()
-            sys.exit(1)
-
         _setup_styles()
 
         self.client = ClientManager()
@@ -275,6 +259,14 @@ class TrustTunnelWindow(tk.Tk):
         self._refresh_server_list()
         self.geometry("820x600")
         self.minsize(500, 400)
+
+        # Tk version warning (non-blocking — shown in console, not as popup)
+        ok, msg = _check_tk_version(self)
+        if not ok:
+            self._log("⚠ Tk version too old — widgets may be broken.")
+            self._log("   Install Homebrew Python: brew install python@3.11")
+            self._log("   Then: /usr/local/bin/python3.11 -m pip install toml")
+            self._log("   Run: /usr/local/bin/python3.11 -m src")
 
         self._poll_status()
         self.protocol("WM_DELETE_WINDOW", self._on_close)
