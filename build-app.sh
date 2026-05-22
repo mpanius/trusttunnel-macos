@@ -92,15 +92,33 @@ if [ -z "$PYTHON" ]; then
             echo "  → Installing toml..."
 
             # Homebrew Python may not ship pip. Derive brew prefix
-            # from python path and add its bin/ to PATH.
-            BREW_PREFIX="$(dirname "$(dirname "$PYTHON_CANDIDATE")")"
-            export PATH="$BREW_PREFIX/bin:$PATH"
+            BREW_PREFIX="$(brew --prefix python@3.11 2>/dev/null || dirname "$(dirname "$(dirname "$PYTHON_CANDIDATE")")")"
+            export PATH="$BREW_PREFIX/bin:$BREW_PREFIX/libexec/bin:$PATH"
 
-            if ! "$PYTHON_CANDIDATE" -m pip install --quiet toml 2>&1; then
+            _install_toml() {
+                if "$PYTHON_CANDIDATE" -m pip install --quiet toml 2>/dev/null; then
+                    return 0
+                fi
+                # ensurepip fallback
                 echo "  → pip not found, bootstrapping via ensurepip..."
                 "$PYTHON_CANDIDATE" -m ensurepip --upgrade 2>&1 || true
-                "$PYTHON_CANDIDATE" -m pip install --quiet toml 2>&1
-            fi
+                # Try pip module first, then locate pip3 binary
+                if "$PYTHON_CANDIDATE" -m pip install --quiet toml 2>/dev/null; then
+                    return 0
+                fi
+                PIP3=$(find "$BREW_PREFIX" -name pip3 -type f 2>/dev/null | head -1)
+                if [ -n "$PIP3" ]; then
+                    "$PIP3" install --quiet toml 2>&1
+                    return $?
+                fi
+                return 1
+            }
+            _install_toml || {
+                echo "  ✗ Failed to install toml. Run manually:"
+                echo "    $PYTHON_CANDIDATE -m ensurepip --upgrade"
+                echo "    $PYTHON_CANDIDATE -m pip install toml"
+                exit 1
+            }
             PYTHON="$PYTHON_CANDIDATE"
             echo "  ✓ Done! Continuing with $PYTHON"
         else
@@ -127,14 +145,29 @@ echo ""
 echo "=== Installing build dependencies ==="
 
 # Homebrew Python's bin/ may not be on PATH — add it
-BREW_PREFIX="$(dirname "$(dirname "$PYTHON")")"
-export PATH="$BREW_PREFIX/bin:$PATH"
+BREW_PREFIX="$(brew --prefix python@3.11 2>/dev/null || dirname "$(dirname "$(dirname "$PYTHON")")")"
+export PATH="$BREW_PREFIX/bin:$BREW_PREFIX/libexec/bin:$PATH"
 
-if ! "$PYTHON" -m pip install --quiet pyinstaller toml 2>&1; then
+_install_deps() {
+    if "$PYTHON" -m pip install --quiet pyinstaller toml 2>/dev/null; then
+        return 0
+    fi
     echo "  → pip not found, bootstrapping via ensurepip..."
     "$PYTHON" -m ensurepip --upgrade 2>&1 || true
-    "$PYTHON" -m pip install --quiet pyinstaller toml 2>&1
-fi
+    if "$PYTHON" -m pip install --quiet pyinstaller toml 2>/dev/null; then
+        return 0
+    fi
+    PIP3=$(find "$BREW_PREFIX" -name pip3 -type f 2>/dev/null | head -1)
+    if [ -n "$PIP3" ]; then
+        "$PIP3" install --quiet pyinstaller toml 2>&1
+        return $?
+    fi
+    return 1
+}
+_install_deps || {
+    echo "  ✗ Failed to install build deps."
+    exit 1
+}
 
 # 2.5. Download TrustTunnel client binary (bundled in .app)
 echo ""
