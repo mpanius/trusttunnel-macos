@@ -32,16 +32,17 @@ if _TK_VERSION < 8.6:
     )
 
 
-def _check_tk_version():
-    """Warn and ask if user wants to continue with old Tk."""
+def _check_tk_version(parent):
+    """Warn and ask if user wants to continue with old Tk.
+    
+    Must be called AFTER a Tk root is created (parent = the root window).
+    Does NOT create/destroy its own Tk() — that would break subsequent Tk() calls.
+    """
     if _TK_VERSION >= 8.6:
         return True  # all good
     try:
-        root = tk.Tk()
-        root.withdraw()
         ok = messagebox.askyesno(
-            "Tk Version Warning", _WARNING, icon="warning")
-        root.destroy()
+            "Tk Version Warning", _WARNING, icon="warning", parent=parent)
         return ok
     except Exception:
         return False  # can't even show dialog — bail
@@ -256,6 +257,13 @@ class TrustTunnelWindow(tk.Tk):
         super().__init__()
         self.title("TrustTunnel VPN")
         self.configure(bg=BG)
+
+        # Tk version check — must be after super().__init__() so
+        # 'self' is a valid Tk root for the messagebox parent.
+        if not _check_tk_version(self):
+            print("Tk version too old — exiting.", file=sys.stderr)
+            self.destroy()
+            sys.exit(1)
 
         _setup_styles()
 
@@ -663,9 +671,6 @@ class TrustTunnelWindow(tk.Tk):
 
 
 def main():
-    if not _check_tk_version():
-        print("Tk version too old — exiting.", file=sys.stderr)
-        sys.exit(1)
     app = TrustTunnelWindow()
     app.mainloop()
 
