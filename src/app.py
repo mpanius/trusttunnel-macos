@@ -14,6 +14,63 @@ from .config import (
 from .client import ClientManager, ClientState, ClientStatus
 
 
+# ── Tk version guard ───────────────────────────────────────────────
+_TK_VERSION = tk.TkVersion
+
+if _TK_VERSION < 8.6:
+    _WARNING = (
+        f"⚠ Tk {_TK_VERSION} detected — styled widgets will be broken.\n\n"
+        "TrustTunnel requires Tk 8.6+ for proper rendering.\n"
+        "Your system Python uses Tk 8.5 (deprecated).\n\n"
+        "Fix (one-time):\n"
+        "  brew install python@3.11\n"
+        "  /usr/local/bin/python3.11 -m pip install toml\n"
+        "  /usr/local/bin/python3.11 -m src\n\n"
+        "Then make it default:\n"
+        "  export PATH=\"/usr/local/bin:$PATH\"\n\n"
+        "Continue anyway? (fields/buttons may be invisible)"
+    )
+
+
+def _check_tk_version():
+    """Warn and ask if user wants to continue with old Tk."""
+    if _TK_VERSION >= 8.6:
+        return True  # all good
+    try:
+        root = tk.Tk()
+        root.withdraw()
+        ok = messagebox.askyesno(
+            "Tk Version Warning", _WARNING, icon="warning")
+        root.destroy()
+        return ok
+    except Exception:
+        return False  # can't even show dialog — bail
+
+
+# ── Entry widget factory (handles Tk 8.5 vs 8.6) ──────────────────
+def _make_entry(parent, **kwargs):
+    """Create an Entry that works on both Tk 8.5 (system) and 8.6 (Homebrew).
+
+    On Tk 8.6+: uses ttk.Entry with 'Dark.TEntry' style for dark theme.
+    On Tk 8.5:  falls back to tk.Entry WITHOUT bg/fg (system colors only)
+                because Tk 8.5 ignores bg/fg on Entry on macOS, making
+                it invisible on dark backgrounds.
+    """
+    if _TK_VERSION >= 8.6:
+        # ttk.Entry respects fieldbackground/foreground via styles
+        w = ttk.Entry(parent, style="Dark.TEntry", **kwargs)
+    else:
+        # tk.Entry on Tk 8.5: strip styling args — use system defaults
+        safe_kwargs = {k: v for k, v in kwargs.items()
+                       if k not in ('bg', 'fg', 'insertbackground', 'relief',
+                                    'borderwidth', 'font')}
+        # Keep font if provided (font works fine on 8.5)
+        if 'font' in kwargs:
+            safe_kwargs['font'] = kwargs['font']
+        w = tk.Entry(parent, **safe_kwargs)
+    return w
+
+
 # ── ttk style setup ───────────────────────────────────────────────
 def _setup_styles():
     style = ttk.Style()
@@ -58,9 +115,17 @@ def _setup_styles():
     style.configure("TNotebook.Tab", background="#2a2a2a", foreground="#d4d4d4",
                     padding=[16, 6], borderwidth=0)
     style.map("TNotebook.Tab",
-              background=[("selected", "#1e1e1e")],
-              foreground=[("selected", "#ffffff")])
+              background=[("selected", "#1e1e1e")])
 
+    # Dark entry fields
+    style.configure("Dark.TEntry", fieldbackground="#1a1a1a",
+                    foreground="#e0e0e0", insertcolor="#e0e0e0",
+                    borderwidth=0)
+    style.map("Dark.TEntry",
+              fieldbackground=[("focus", "#1a1a1a")])
+
+    # Dark text widget (simulated via style — actual Text styling is per-widget)
+    style.configure("DarkConsole.TFrame", background="#0d0d0d")
 
 # ── colours for tk widgets that don't use ttk ─────────────────────
 BG = "#1e1e1e"
@@ -126,18 +191,12 @@ class AddEditDialog(tk.Toplevel):
                             font=("Menlo", 9))
                 w.pack(side="left", fill="x", expand=True)
             elif is_password:
-                w = tk.Entry(row, show="*", width=42,
-                             bg="#1a1a1a", fg="#e0e0e0",
-                             insertbackground="#e0e0e0",
-                             relief="solid", borderwidth=1,
-                             font=("Helvetica", 11))
+                w = _make_entry(row, show="*", width=42,
+                                font=("Helvetica", 11))
                 w.pack(side="left")
             else:
-                w = tk.Entry(row, width=42,
-                             bg="#1a1a1a", fg="#e0e0e0",
-                             insertbackground="#e0e0e0",
-                             relief="solid", borderwidth=1,
-                             font=("Helvetica", 11))
+                w = _make_entry(row, width=42,
+                                font=("Helvetica", 11))
                 w.pack(side="left")
 
             self._entries[key] = w
@@ -301,10 +360,7 @@ class TrustTunnelWindow(tk.Tk):
         exc_ctrl = tk.Frame(bypass_tab, bg=BG)
         exc_ctrl.pack(fill="x", padx=8, pady=(4, 8))
 
-        self._bypass_entry = tk.Entry(exc_ctrl, bg="#1a1a1a", fg="#e0e0e0",
-                                      insertbackground="#e0e0e0",
-                                      relief="solid", borderwidth=1,
-                                      font=("Menlo", 10))
+        self._bypass_entry = _make_entry(exc_ctrl, font=("Menlo", 10))
         self._bypass_entry.pack(side="left", fill="x", expand=True, padx=(0, 6))
         self._bypass_entry.bind("<Return>", lambda e: self._add_exclusion())
 
@@ -607,6 +663,9 @@ class TrustTunnelWindow(tk.Tk):
 
 
 def main():
+    if not _check_tk_version():
+        print("Tk version too old — exiting.", file=sys.stderr)
+        sys.exit(1)
     app = TrustTunnelWindow()
     app.mainloop()
 

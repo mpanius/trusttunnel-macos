@@ -9,9 +9,12 @@ cd "$SCRIPT_DIR"
 echo "=== TrustTunnel macOS App Builder ==="
 echo ""
 
-# 1. Check Python and Tkinter
+# 1. Ensure Homebrew Python 3.11+ with Tk 8.6+
+echo "=== Checking Python + Tkinter ==="
 PYTHON=""
-for candidate in /usr/local/bin/python3.11 /opt/homebrew/bin/python3.11 /usr/local/bin/python3 /opt/homebrew/bin/python3; do
+
+# Preferred: Homebrew Python 3.11
+for candidate in /usr/local/bin/python3.11 /opt/homebrew/bin/python3.11; do
     if [ -x "$candidate" ]; then
         ver=$("$candidate" -c "import tkinter; print(tkinter.TkVersion)" 2>/dev/null || echo "0")
         if [ "${ver%%.*}" -ge 8 ] && [ "${ver#*.}" -ge 6 ]; then
@@ -21,11 +24,53 @@ for candidate in /usr/local/bin/python3.11 /opt/homebrew/bin/python3.11 /usr/loc
     fi
 done
 
+# Fallback: other Homebrew Python 3
 if [ -z "$PYTHON" ]; then
-    echo "ERROR: No Python with Tkinter 8.6+ found."
-    echo "Install: brew install python@3.11"
-    exit 1
+    for candidate in /usr/local/bin/python3 /opt/homebrew/bin/python3; do
+        if [ -x "$candidate" ] && [[ "$candidate" == *homebrew* ]] 2>/dev/null; then
+            ver=$("$candidate" -c "import tkinter; print(tkinter.TkVersion)" 2>/dev/null || echo "0")
+            if [ "${ver%%.*}" -ge 8 ] && [ "${ver#*.}" -ge 6 ]; then
+                PYTHON="$candidate"
+                break
+            fi
+        fi
+    done
 fi
+
+# If still no suitable Python, try to install Homebrew Python 3.11
+if [ -z "$PYTHON" ]; then
+    echo "  No Python with Tk 8.6+ found."
+    echo "  Homebrew Python 3.11 is required. Install automatically?"
+    read -p "  [Y/n]: " brew_ans
+    if [ "${brew_ans:-y}" != "y" ] && [ "${brew_ans:-y}" != "Y" ] && [ -n "$brew_ans" ]; then
+        echo "ERROR: Cannot continue without Homebrew Python 3.11."
+        echo "Install manually: brew install python@3.11"
+        exit 1
+    fi
+
+    # Install Homebrew if missing
+    if ! command -v brew &>/dev/null; then
+        echo "  → Installing Homebrew..."
+        /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+    fi
+
+    echo "  → Installing python@3.11..."
+    brew install python@3.11
+
+    # Reload PATH and retry
+    if [ -x /usr/local/bin/python3.11 ]; then
+        PYTHON=/usr/local/bin/python3.11
+    elif [ -x /opt/homebrew/bin/python3.11 ]; then
+        PYTHON=/opt/homebrew/bin/python3.11
+    fi
+
+    if [ -z "$PYTHON" ] || [ ! -x "$PYTHON" ]; then
+        echo "ERROR: Homebrew Python 3.11 installation failed."
+        echo "Try manually: brew install python@3.11"
+        exit 1
+    fi
+fi
+
 echo "Python: $PYTHON (Tk $("$PYTHON" -c "import tkinter; print(tkinter.TkVersion)"))"
 
 # 2. Install build deps
