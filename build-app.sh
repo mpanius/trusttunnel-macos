@@ -37,36 +37,56 @@ if [ -z "$PYTHON" ]; then
     done
 fi
 
-# If still no suitable Python, try to install Homebrew Python 3.11
+# If still no suitable Python — give clear fix instructions instead of
+# auto-installing (Homebrew shallow clone, GitHub rate limits, etc.)
 if [ -z "$PYTHON" ]; then
-    echo "  No Python with Tk 8.6+ found."
-    echo "  Homebrew Python 3.11 is required. Install automatically?"
-    read -p "  [Y/n]: " brew_ans
-    if [ "${brew_ans:-y}" != "y" ] && [ "${brew_ans:-y}" != "Y" ] && [ -n "$brew_ans" ]; then
-        echo "ERROR: Cannot continue without Homebrew Python 3.11."
-        echo "Install manually: brew install python@3.11"
-        exit 1
-    fi
+    echo ""
+    echo "╔══════════════════════════════════════════════════════════════╗"
+    echo "║  ⚠ macOS system Python uses Tk 8.5 — widgets are broken.   ║"
+    echo "║  TrustTunnel needs Homebrew Python 3.11 with Tk 8.6.        ║"
+    echo "╠══════════════════════════════════════════════════════════════╣"
+    echo "║  Copy-paste to fix (one-time, ~2 min):                      ║"
+    echo "║                                                            ║"
+    echo "║  # 1. Fix Homebrew shallow clone (if needed)                ║"
+    echo "║  git -C \"\$(brew --repo homebrew/core)\" fetch --unshallow   ║"
+    echo "║                                                            ║"
+    echo "║  # 2. Install Python 3.11 with Tk 8.6                       ║"
+    echo "║  brew install python@3.11                                   ║"
+    echo "║                                                            ║"
+    echo "║  # 3. Install toml dependency                                ║"
+    echo "║  /usr/local/bin/python3.11 -m pip install toml              ║"
+    echo "║                                                            ║"
+    echo "║  # 4. Re-run build                                          ║"
+    echo "║  ./build-app.sh                                             ║"
+    echo "╚══════════════════════════════════════════════════════════════╝"
+    echo ""
+    echo "Run these steps in Terminal now?"
+    read -p "  [y/N]: " run_ans
+    if [ "${run_ans}" = "y" ] || [ "${run_ans}" = "Y" ]; then
+        echo ""
+        echo "  → Fixing Homebrew shallow clone..."
+        git -C "$(brew --repo homebrew/core)" fetch --unshallow 2>/dev/null || \
+            echo "  (shallow clone fix skipped — continuing)"
 
-    # Install Homebrew if missing
-    if ! command -v brew &>/dev/null; then
-        echo "  → Installing Homebrew..."
-        /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
-    fi
-
-    echo "  → Installing python@3.11..."
-    brew install python@3.11
-
-    # Reload PATH and retry
-    if [ -x /usr/local/bin/python3.11 ]; then
-        PYTHON=/usr/local/bin/python3.11
-    elif [ -x /opt/homebrew/bin/python3.11 ]; then
-        PYTHON=/opt/homebrew/bin/python3.11
-    fi
-
-    if [ -z "$PYTHON" ] || [ ! -x "$PYTHON" ]; then
-        echo "ERROR: Homebrew Python 3.11 installation failed."
-        echo "Try manually: brew install python@3.11"
+        echo "  → Installing python@3.11..."
+        if brew install python@3.11 2>&1; then
+            echo ""
+            echo "  ✓ Python 3.11 installed. Installing toml..."
+            PYTHON_CANDIDATE=""
+            for p in /usr/local/bin/python3.11 /opt/homebrew/bin/python3.11; do
+                [ -x "$p" ] && PYTHON_CANDIDATE="$p" && break
+            done
+            if [ -n "$PYTHON_CANDIDATE" ]; then
+                "$PYTHON_CANDIDATE" -m pip install --quiet toml
+                PYTHON="$PYTHON_CANDIDATE"
+                echo "  ✓ Done! Continuing with $PYTHON"
+            fi
+        else
+            echo "  ✗ brew install failed. Run the manual steps above."
+            exit 1
+        fi
+    else
+        echo "Run the steps above and re-run ./build-app.sh"
         exit 1
     fi
 fi
