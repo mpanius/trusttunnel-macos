@@ -58,14 +58,33 @@ drag to `/Applications`, double-click. No terminal, no Python, no CLI client nee
 
 ## Build from source
 
-Requires Python 3.11+ with Tkinter 8.6+ (Homebrew Python recommended):
+### Recommended: build via uv (no Python hassle)
+
+[uv](https://github.com/astral-sh/uv) installs a self-contained Python that
+ships a working **Tk 8.6** — so you sidestep the broken-`_tkinter` problems of
+Homebrew/system Python that make the legacy `build-app.sh` loop.
 
 ```bash
 # 1. Clone
 git clone https://github.com/inhale/trusttunnel-macos.git
 cd trusttunnel-macos
 
-# 2. One-command build
+# 2. Install uv if you don't have it
+brew install uv      # or: curl -LsSf https://astral.sh/uv/install.sh | sh
+
+# 3. One-command build
+./build-app-uv.sh
+```
+
+uv downloads the interpreter on first run (then caches it). Override the
+version with `TT_PYTHON=3.11 ./build-app-uv.sh`.
+
+### Alternative: build with system/Homebrew Python
+
+Requires Python 3.11+ with Tkinter 8.6+ (Homebrew Python). If Homebrew's
+`_tkinter` is broken (the usual case), use the uv path above instead.
+
+```bash
 ./build-app.sh
 ```
 
@@ -73,12 +92,11 @@ Output: `dist/TrustTunnel.app` — double-click to run.
 
 ### Dev run (no build)
 
-```bash
-# Install deps
-/usr/local/bin/python3.11 -m pip install toml
+All runtime deps are vendored/stdlib, so just run the package with a
+Tk-capable Python:
 
-# Run
-/usr/local/bin/python3.11 -m src
+```bash
+uv run --python 3.12 python -m src
 ```
 
 ## Usage
