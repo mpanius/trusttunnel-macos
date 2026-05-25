@@ -1,5 +1,5 @@
 #!/bin/bash
-# Build TrustTunnel.app for macOS — via uv (no system/Homebrew Python hassle).
+# Build TrustTunnelGUI.app for macOS — via uv (no system/Homebrew Python hassle).
 #
 # Why this exists: Homebrew's python@3.11 ships a frequently-broken _tkinter
 # (tcl-tk linkage), which makes build-app.sh loop on "install python@3.11".
@@ -70,7 +70,7 @@ uv run --no-project --python "$TT_PYTHON" --with pyinstaller \
 # 5. Result + optional install (same UX as build-app.sh).
 echo ""
 echo "=== Done ==="
-APP="dist/TrustTunnel.app"
+APP="dist/TrustTunnelGUI.app"
 if [ ! -d "$APP" ]; then
     echo "ERROR: Build failed. Check output above."
     exit 1
@@ -82,9 +82,9 @@ echo ""
 echo "Copy to /Applications?"
 read -p "  [Y/n]: " answer
 if [ "${answer:-y}" = "y" ] || [ "${answer:-y}" = "Y" ] || [ -z "$answer" ]; then
-    rm -rf /Applications/TrustTunnel.app
+    rm -rf /Applications/TrustTunnelGUI.app
     cp -R "$APP" /Applications/
-    echo "  → Copied to /Applications/TrustTunnel.app"
+    echo "  → Copied to /Applications/TrustTunnelGUI.app"
 
     # Auto-configure sudo if not already done.
     SUDOERS="/etc/sudoers.d/trusttunnel"
@@ -105,4 +105,4 @@ else
     echo "  To install later: cp -r \"$APP\" /Applications/"
 fi
 echo ""
-echo "To share: zip -r TrustTunnel-macOS.zip \"$APP\""
+echo "To share: zip -r TrustTunnelGUI-macOS.zip \"$APP\""

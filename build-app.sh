@@ -1,5 +1,5 @@
 #!/bin/bash
-# Build TrustTunnel.app for macOS distribution
+# Build TrustTunnelGUI.app for macOS distribution
 # Run this on your Mac (not on VPS — PyInstaller needs target OS)
 set -euo pipefail
 
@@ -246,7 +246,7 @@ echo "=== Building .app ==="
 # 5. Result + install
 echo ""
 echo "=== Done ==="
-APP="dist/TrustTunnel.app"
+APP="dist/TrustTunnelGUI.app"
 if [ -d "$APP" ]; then
     SIZE=$(du -sh "$APP" | cut -f1)
     echo "App:  $SCRIPT_DIR/$APP  ($SIZE)"
@@ -254,9 +254,9 @@ if [ -d "$APP" ]; then
     echo "Copy to /Applications?"
     read -p "  [Y/n]: " answer
     if [ "${answer:-y}" = "y" ] || [ "${answer:-y}" = "Y" ] || [ -z "$answer" ]; then
-        rm -rf /Applications/TrustTunnel.app
+        rm -rf /Applications/TrustTunnelGUI.app
         cp -R "$APP" /Applications/
-        echo "  → Copied to /Applications/TrustTunnel.app"
+        echo "  → Copied to /Applications/TrustTunnelGUI.app"
 
         # Auto-configure sudo if not already done
         SUDOERS="/etc/sudoers.d/trusttunnel"
@@ -277,7 +277,7 @@ if [ -d "$APP" ]; then
         echo "  To install later: cp -r \"$APP\" /Applications/"
     fi
     echo ""
-    echo "To share: zip -r TrustTunnel-macOS.zip \"$APP\""
+    echo "To share: zip -r TrustTunnelGUI-macOS.zip \"$APP\""
 else
     echo "ERROR: Build failed. Check output above."
     exit 1

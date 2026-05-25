@@ -5,7 +5,7 @@ Build:
     pip install pyinstaller toml
     pyinstaller trusttunnel.spec
 
-Output: dist/TrustTunnel.app  (double-clickable, no terminal)
+Output: dist/TrustTunnelGUI.app  (double-clickable, no terminal)
 """
 
 import sys
@@ -67,7 +67,7 @@ exe = EXE(
     a.scripts,
     [],
     exclude_binaries=True,
-    name="TrustTunnel",
+    name="TrustTunnelGUI",
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
@@ -89,20 +89,20 @@ coll = COLLECT(
     strip=False,
     upx=True,
     upx_exclude=[],
-    name="TrustTunnel",
+    name="TrustTunnelGUI",
 )
 
 app = BUNDLE(
     coll,
-    name="TrustTunnel.app",
+    name="TrustTunnelGUI.app",
     icon="icon.icns" if Path("icon.icns").exists() else None,
     bundle_identifier="com.trusttunnel.gui",
     info_plist={
         "NSHighResolutionCapable": True,
         "CFBundleShortVersionString": "1.0.0",
         "CFBundleVersion": "1.0.0",
-        "CFBundleName": "TrustTunnel",
-        "CFBundleDisplayName": "TrustTunnel VPN",
+        "CFBundleName": "TrustTunnel GUI",
+        "CFBundleDisplayName": "TrustTunnel GUI",
         "LSMinimumSystemVersion": "10.15",
         "NSRequiresAquaSystemAppearance": False,
     },

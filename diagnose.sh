@@ -25,7 +25,7 @@ section "PyInstaller"
 command -v pip3 >/dev/null && pip3 show pyinstaller || echo "pyinstaller not installed"
 
 section "trusttunnel_client binary"
-BIN_PATH="/Applications/TrustTunnel.app/Contents/Resources/bin/trusttunnel_client"
+BIN_PATH="/Applications/TrustTunnelGUI.app/Contents/Resources/bin/trusttunnel_client"
 if [[ -f "$BIN_PATH" ]]; then
   echo "Binary exists: $BIN_PATH"
   ls -l "$BIN_PATH"
@@ -42,7 +42,7 @@ SUDOERS_FILE="/etc/sudoers.d/trusttunnel"
   echo "NOPASSWD entry found" || echo "NOPASSWD entry MISSING"
 
 section "App bundle"
-APP_BUNDLE="/Applications/TrustTunnel.app"
+APP_BUNDLE="/Applications/TrustTunnelGUI.app"
 [[ -d "$APP_BUNDLE" ]] && \
   find "$APP_BUNDLE" -name "trusttunnel_client" -o -name "*.py" -o -name "*.icns" | head -10 || \
   echo "App bundle NOT found at $APP_BUNDLE"

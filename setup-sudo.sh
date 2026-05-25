@@ -1,10 +1,10 @@
 #!/bin/bash
 # Configure passwordless sudo for TrustTunnel VPN client
-# Run once after installing TrustTunnel.app to /Applications
+# Run once after installing TrustTunnelGUI.app to /Applications
 
 set -euo pipefail
 
-APP_CLI="/Applications/TrustTunnel.app/Contents/Resources/bin/trusttunnel_client"
+APP_CLI="/Applications/TrustTunnelGUI.app/Contents/Resources/bin/trusttunnel_client"
 BREW_CLI="/usr/local/bin/trusttunnel_client"
 OPT_CLI="/opt/trusttunnel_client/trusttunnel_client"
 SUDOERS_FILE="/etc/sudoers.d/trusttunnel"

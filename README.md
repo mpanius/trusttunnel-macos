@@ -43,17 +43,17 @@ This app uses **sudoers NOPASSWD** — the standard approach for tools like Wire
 Or manually:
 
 ```bash
-sudo bash -c 'echo "$(whoami) ALL=(ALL) NOPASSWD: /Applications/TrustTunnel.app/Contents/Resources/bin/trusttunnel_client" > /etc/sudoers.d/trusttunnel'
+sudo bash -c 'echo "$(whoami) ALL=(ALL) NOPASSWD: /Applications/TrustTunnelGUI.app/Contents/Resources/bin/trusttunnel_client" > /etc/sudoers.d/trusttunnel'
 ```
 
 What this does: tells macOS "user X can run this specific binary as root without a password."
 It is NOT a blanket "run anything as root" — only that one binary.
 
-After setup, TrustTunnel.app works without any password prompts.
+After setup, TrustTunnelGUI.app works without any password prompts.
 
 ## Install (pre-built .app)
 
-Download the latest `TrustTunnel.app` from [Releases](https://github.com/inhale/trusttunnel-macos/releases),
+Download the latest `TrustTunnelGUI.app` from [Releases](https://github.com/mpanius/trusttunnel-macos/releases),
 drag to `/Applications`, double-click. No terminal, no Python, no CLI client needed.
 
 ## Build from source
@@ -66,7 +66,7 @@ Homebrew/system Python that make the legacy `build-app.sh` loop.
 
 ```bash
 # 1. Clone
-git clone https://github.com/inhale/trusttunnel-macos.git
+git clone https://github.com/mpanius/trusttunnel-macos.git
 cd trusttunnel-macos
 
 # 2. Install uv if you don't have it
@@ -88,7 +88,7 @@ Requires Python 3.11+ with Tkinter 8.6+ (Homebrew Python). If Homebrew's
 ./build-app.sh
 ```
 
-Output: `dist/TrustTunnel.app` — double-click to run.
+Output: `dist/TrustTunnelGUI.app` — double-click to run.
 
 ### Dev run (no build)
 
@@ -101,7 +101,7 @@ uv run --python 3.12 python -m src
 
 ## Usage
 
-1. Launch TrustTunnel.app (or `python3 -m src`)
+1. Launch TrustTunnelGUI.app (or `python3 -m src`)
 2. **Servers tab** → + Add — fill in name, hostname, address, username, password
 3. Or **Import Link** — paste a `tt://?` deep-link from your endpoint
 4. Select a server → **Connect**
@@ -130,12 +130,12 @@ In the **Bypass** tab, add exclusion masks. These sites will NOT go through the 
 ## File locations
 
 - Settings: `~/.trusttunnel-gui/servers.toml`
-- Build output: `dist/TrustTunnel.app`
+- Build output: `dist/TrustTunnelGUI.app`
 
 ## Architecture
 
 ```
-TrustTunnel.app
+TrustTunnelGUI.app
 ├── src/app.py         — Tkinter window, tabs, UI
 ├── src/client.py      — trusttunnel_client subprocess manager
 ├── src/config.py      — TOML profiles, deep-link parser
